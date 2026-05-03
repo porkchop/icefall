@@ -75,6 +75,16 @@ For each phase the doc lists: **Goal**, **Lead agent**, **Reviewers**, **Deliver
 
 ## Phase 2 — Map Generation
 
+> **Phase 2 split.** Per `artifacts/decision-memo-phase-2.md` and the
+> attached `architecture-red-team` review (see `artifacts/red-team-phase-2.md`),
+> Phase 2 is split into **Phase 2.0** (planning gate — decision memo + red-team
+> review + addendum + Phase 1 carry-forward follow-ups), **Phase 2.A**
+> (sandbox-verifiable implementation), and **Phase 2.B** (live GitHub Pages
+> verification, which requires an external push). Phase 3 cannot begin until
+> all three are approved. The original Phase 2 acceptance criteria are
+> partitioned between 2.A and 2.B below; Phase 2.0 introduces no new
+> acceptance criteria of its own beyond planning-gate compliance.
+
 **Goal.** Generate dungeon floors deterministically from `(seed, floorN)`. Floors are 2D grids of tiles with rooms, corridors, doors, and pre-slotted encounter markers. Output is plain data — no rendering yet.
 
 **Lead agent.** `engine-builder`
@@ -87,17 +97,33 @@ For each phase the doc lists: **Goal**, **Lead agent**, **Reviewers**, **Deliver
 - CLI tool: `npm run gen-floor -- --seed <X> --floor <N>` prints an ASCII rendering of a floor to stdout for human inspection
 - A "fixture pack": 20 fixed `(seed, floor)` pairs with their golden ASCII output committed to the repo
 - The deployed diagnostic page is extended to include an in-browser ASCII floor preview, so anyone visiting the live URL can see mapgen working
+- A property-style reachability sweep over 200 deterministic seeds × floors 1–10 (per red-team review N4)
+- CI workflow uploads `vite build --report` (rollup-plugin-visualizer treemap) as the `bundle-report` artifact (per red-team review N5)
 
-**Acceptance criteria.**
-- Same `(seed, floor)` always produces the same floor (golden test).
+**Acceptance criteria — Phase 2.0 (planning gate).**
+- `artifacts/decision-memo-phase-2.md` exists and was reviewed by `architecture-red-team` before any Phase 2 implementation code is written.
+- The red-team review at `artifacts/red-team-phase-2.md` exists; any blocking issues it raised are addressed via an in-memo addendum that supersedes the original prose.
+- The two Phase 1 carry-forward follow-ups land before Phase 2.A code begins:
+  - `code-review #2` — bump `eslint-rules/no-float-arithmetic` invalid-fixture count beyond 20 (target ≥ 25).
+  - `code-review #8` — add a unit test asserting `encodeAction` emits optional fields in strictly increasing tag order across all 2^k field-presence combinations.
+
+**Acceptance criteria — Phase 2.A (in-sandbox).**
+- Same `(seed, floor)` always produces the same floor (golden test on the 20-pair fixture pack).
 - Every floor has exactly one entrance and exactly one exit, except floor 10 which has an entrance and a boss room.
-- All rooms reachable from the entrance (graph connectivity test).
+- All rooms reachable from the entrance (graph connectivity test, asserted both as a runtime invariant inside `generateFloor` and as a 200-seed property sweep).
 - Floor 10 is structurally distinguished: a single large boss arena reachable from the entrance.
-- Mapgen consumes only the `streams.mapgen` stream, never the sim stream — verified by a runtime guard plus a lint rule.
-- The live URL serves the updated diagnostic page with the ASCII preview working.
+- Mapgen consumes only the `streams.mapgen(floorN)` stream, never the sim or ui streams — verified by the runtime guard contract pinned in the decision memo's addendum (per-call delta on `RunStreams.__consumed` equals exactly `{"mapgen:"+floorN}`), plus a lint rule, plus a self-test that runs in the browser.
+- All frozen contracts established by the decision memo (tile codes, JSON shape, registry IDs, ASCII char mapping, base64url alphabet, always-present null-fields, strict parser, `seedToBytes`) are implemented and have at least one regression-failing test.
+- Bundle size budget: `dist/`-gzipped ≤ 75 KB; `bundle-report` uploaded as a CI artifact.
+- `npm ci && npm run lint && npm run test && npm run build && npm run test:e2e` all green inside the sandbox.
+
+**Acceptance criteria — Phase 2.B (external verification, post-push).**
+- The live GitHub Pages URL serves the updated diagnostic page with the in-browser ASCII floor preview working.
+- The Phase 2.B Playwright job exercises the preview UI (set seed, set floor, click "Generate floor", assert `window.__FLOOR_PREVIEW__ === "ready"`, assert the rendered ASCII matches the expected golden output for that seed/floor pair) on chromium, firefox, and webkit.
 
 **Risks.**
-- Map gen accidentally consuming sim-stream RNG would silently couple level layout to combat outcomes — contained by the stream split and the runtime guard.
+- Map gen accidentally consuming sim-stream RNG would silently couple level layout to combat outcomes — contained by the stream split, the runtime per-call delta guard, the lint rule, and the in-browser self-test.
+- Frozen-contract drift across runtimes — contained by the byte-equality fixture-pack tests and the new `mapgen-cross-runtime-digest` self-test.
 
 ---
 

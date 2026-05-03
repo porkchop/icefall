@@ -82,5 +82,21 @@ tester.run("no-float-arithmetic", rule, {
       code: "const x = JSON.parse('{\"x\":0.5}');",
       errors: [{ messageId: "jsonParse" }],
     },
+    { code: "const x = 0.0;", errors: [{ messageId: "decimalLiteral" }] },
+    { code: "const x = .5;", errors: [{ messageId: "decimalLiteral" }] },
+    { code: "const x = Math.trunc(1);", errors: [{ messageId: "mathMember" }] },
+    {
+      code: "const x = Math.atan2(1, 1);",
+      errors: [{ messageId: "mathMember" }],
+    },
+    { code: "const x = Math.LN2;", errors: [{ messageId: "mathMember" }] },
+    {
+      code: "const x = Number.MIN_VALUE;",
+      errors: [{ messageId: "numberMember" }],
+    },
+    {
+      code: "let a = 5; a = a / 2;",
+      errors: [{ messageId: "divOperator" }],
+    },
   ],
 });

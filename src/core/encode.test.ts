@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
+import * as encodeMod from "./encode";
 import {
   ACTION_VERSION,
   TAG_TARGET,
   TAG_ITEM,
   TAG_DIR,
   encodeAction,
+  type Action,
 } from "./encode";
 
 describe("ACTION_VERSION + tags", () => {
@@ -88,6 +90,77 @@ describe("encodeAction — combined fields", () => {
     const b = encodeAction({ type: "x", target: 1 });
     expect(Array.from(a)).toEqual(Array.from(b));
   });
+});
+
+// Defensive against a future optional field being added in source-order
+// rather than tag-order: enumerate every subset of the optional fields
+// and assert the wire form's optional-field tags are strictly increasing.
+describe("encodeAction — tag-order combinatoric (all 2^k presence subsets)", () => {
+  type Optional = "target" | "item" | "dir";
+  const TAG_BY_FIELD: Record<Optional, number> = {
+    target: TAG_TARGET,
+    item: TAG_ITEM,
+    dir: TAG_DIR,
+  };
+  const FIELDS: readonly Optional[] = ["target", "item", "dir"] as const;
+
+  function readOptionalTagsInOrder(bytes: Uint8Array): number[] {
+    // Skip [version:1][type_len:1][type_bytes...]
+    const typeLen = bytes[1]!;
+    let i = 2 + typeLen;
+    const tags: number[] = [];
+    while (i < bytes.length) {
+      const tag = bytes[i]!;
+      tags.push(tag);
+      if (tag === TAG_TARGET) {
+        i += 1 + 4;
+      } else if (tag === TAG_ITEM) {
+        const len = bytes[i + 1]!;
+        i += 1 + 1 + len;
+      } else if (tag === TAG_DIR) {
+        i += 1 + 1;
+      } else {
+        throw new Error(
+          `unknown optional-field tag 0x${tag.toString(16)} at offset ${i}`,
+        );
+      }
+    }
+    return tags;
+  }
+
+  // Sentinel: if a future TAG_* is exported from encode.ts, this test's
+  // FIELDS list must also be extended — otherwise the new field's tag
+  // ordering escapes the combinatoric sweep.
+  it("FIELDS covers every TAG_* exported from encode.ts", () => {
+    const exportedTags = Object.keys(encodeMod).filter((k) =>
+      k.startsWith("TAG_"),
+    );
+    expect(exportedTags.length).toBe(FIELDS.length);
+  });
+
+  for (let mask = 0; mask < 1 << FIELDS.length; mask++) {
+    const present: Optional[] = [];
+    for (let bit = 0; bit < FIELDS.length; bit++) {
+      if (mask & (1 << bit)) present.push(FIELDS[bit]!);
+    }
+    const label = present.length === 0 ? "(none)" : present.join("+");
+
+    it(`subset ${label}: optional-field tags emit strictly increasing`, () => {
+      const action: Action = { type: "t" };
+      if (present.includes("target")) action.target = 1;
+      if (present.includes("item")) action.item = "i";
+      if (present.includes("dir")) action.dir = 2;
+
+      const observed = readOptionalTagsInOrder(encodeAction(action));
+
+      for (let i = 1; i < observed.length; i++) {
+        expect(observed[i - 1]!).toBeLessThan(observed[i]!);
+      }
+
+      const expected = present.map((f) => TAG_BY_FIELD[f]).sort((a, b) => a - b);
+      expect(observed).toEqual(expected);
+    });
+  }
 });
 
 describe("encodeAction — validation", () => {

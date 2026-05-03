@@ -1,48 +1,81 @@
 {
-  "phase": "phase-1B",
+  "phase": "phase-2.0",
   "approved": true,
-  "summary": "Phase 1.B (live GitHub Pages verification + Playwright cross-runtime against real browsers) complete. The external acceptance criteria that were unreachable from the sandbox during Phase 1.A have all now been observed green on the public GitHub Actions run for commit 2038fc9 on master. With Phase 1.A and Phase 1.B both approved, Phase 1 (Deterministic Core + Public Deployment) is complete and Phase 2 (Map Generation) is unblocked.",
-  "decision_memo": "artifacts/decision-memo-phase-1.md",
-  "suggested_commit_message": "phase-1B: live deploy + cross-runtime Playwright verified green",
+  "summary": "Phase 2.0 (Planning Gate of Phase 2 — Map Generation) complete. Decision memo authored, architecture-red-team review identified four blocking issues (B1 base64url alphabet/padding + missed reuse, B2 null-field handling, B3 strict-vs-lax parsing, B4 RunStreams contract change + singleton-vs-subset contradiction) and six non-blocking concerns; all four blockers and all six non-blockers are addressed in an in-memo addendum that overrides conflicting prose. The two Phase 1 carry-forward follow-ups explicitly tagged 'before Phase 2 sim code lands' have landed: (#2) eslint-rules/no-float-arithmetic invalid-fixture count expanded from 20 → 27, and (#8) encodeAction tag-order combinatoric test added that walks all 2^3 = 8 subsets of optional Action fields {target, item, dir} plus a sentinel test asserting the test's FIELDS list covers every TAG_* exported from encode.ts. PHASES.md was updated to formally split Phase 2 into Phase 2.0 (planning gate), Phase 2.A (sandbox-verifiable implementation), and Phase 2.B (live deploy verification), with original Phase 2 acceptance criteria partitioned across 2.A (5 criteria) and 2.B (1 criterion) and new 2.A criteria added for the property-style reachability sweep (red-team N4) and bundle-report artifact upload (red-team N5). Phase 2.A implementation may begin in the next phase cycle.",
+  "decision_memo": "artifacts/decision-memo-phase-2.md",
+  "suggested_commit_message": "phase-2.0: planning gate (decision memo + red-team + addendum + Phase 1 carry-forwards)",
   "verification_sprint": {
-    "purpose": "Confirm Phase 1.A foundation has not drifted before approving the Phase 1 verification gate.",
-    "unit_tests": "151 passed (vitest run --coverage); 100% lines / 100% statements / 100% functions on src/core/*; branch 95.97%",
+    "purpose": "Confirm Phase 1 (1.A + 1.B) foundation has not drifted before opening Phase 2 work.",
+    "unit_tests": "167 passed (vitest run --coverage); 100% lines / 100% statements / 100% functions on src/core/*; branch 95.97% (uncovered branches limited to self-test.ts lines 59, 63-64, 113-129, unchanged from the Phase 1 baseline)",
     "lint": "eslint . — 0 errors",
     "typecheck": "tsc -b --noEmit — 0 errors (TS strict + exactOptionalPropertyTypes + noUncheckedIndexedAccess)",
-    "primary_workflow": "Live URL https://porkchop.github.io/icefall/ fetched (HTTP 200 via custom-domain redirect); deployed bundle index-CuSjQP0G.js contains all expected runtime markers (RANDOM_WALK_DIGEST, __SELF_TEST_RESULT__, __RANDOM_WALK_DIGEST__, self-test-banner, DEV-) and both golden digests (142c5ee9… random-walk, ba7816bf… SubtleCrypto canary)."
+    "primary_workflow": "Phase 2.0 ships no user-facing code (planning gate posture); the primary workflow remains the live https://porkchop.github.io/icefall/ diagnostic page, last verified green in commit 2038fc9 per Phase 1.B approval. Phase 2.A will extend the diagnostic page; Phase 2.B will re-verify it live."
   },
-  "verification": {
-    "acceptance_criteria": {
-      "deploy_workflow_runs_green_within_5min": {
-        "status": "passed",
-        "evidence": "GitHub Actions run 25290884558 for commit 2038fc9 on master: status=completed, conclusion=success. run_started_at 2026-05-03T21:09:46Z → updated_at 2026-05-03T21:11:39Z = 1m 53s end-to-end, well under the 5-minute cap. Both jobs (build & test, deploy to GitHub Pages) succeeded.",
-        "url": "https://github.com/porkchop/icefall/actions/runs/25290884558"
-      },
-      "live_url_serves_diagnostic_page_green": {
-        "status": "passed",
-        "evidence": "curl https://porkchop.github.io/icefall/ → 301 → custom domain → 200 OK. index.html references /icefall/assets/index-CuSjQP0G.js. Bundle contains markers RANDOM_WALK_DIGEST, __SELF_TEST_RESULT__, __RANDOM_WALK_DIGEST__, self-test-banner, DEV-, and the golden digests 142c5ee954cbcd40ea846f00c117bb59828bd61256729b2079c875d2c85dbac4 (1000-step random walk) and ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad (SubtleCrypto canary). Render-time green-status assertion is also covered by the CI Playwright assertion below."
-      },
-      "readme_play_live_link_resolves": {
-        "status": "passed",
-        "evidence": "README anchor https://porkchop.github.io/icefall/ followed via curl -L returns final 200 OK with the diagnostic HTML."
-      },
-      "cross_runtime_playwright_green": {
-        "status": "passed",
-        "evidence": "Job 74142400478 ('build & test') step 9 'install playwright browsers' (chromium firefox webkit, --with-deps): success; step 10 'cross-runtime e2e' (npm run test:e2e): success. playwright.config.ts defines projects chromium/firefox/webkit with forbidOnly:true and retries:0, so any single-project failure would have failed the step. tests/e2e/diagnostic.spec.ts asserts both window.__SELF_TEST_RESULT__==='green' and window.__RANDOM_WALK_DIGEST__===<golden constant 142c5ee9…> — i.e. cross-runtime determinism end-to-end across all three browser engines."
-      }
+  "planning_gate": {
+    "decision_memo": "artifacts/decision-memo-phase-2.md",
+    "decisions_recorded": 15,
+    "frozen_contracts_locked": 13,
+    "open_questions_deferred": 3,
+    "red_team_review": "artifacts/red-team-phase-2.md",
+    "red_team_verdict_initial": "REVISE BEFORE IMPLEMENTATION",
+    "red_team_blockers": ["B1", "B2", "B3", "B4"],
+    "red_team_blockers_resolved_in_addendum": ["B1", "B2", "B3", "B4"],
+    "red_team_nonblockers": ["N1", "N2", "N3", "N4", "N5", "N6"],
+    "red_team_nonblockers_resolved_in_addendum": ["N1", "N2", "N3", "N4", "N5", "N6"],
+    "red_team_verdict_after_addendum": "APPROVE WITH ADDENDUM",
+    "code_review": "artifacts/code-review-phase-2-0.md",
+    "code_review_verdict": "APPROVE WITH NITS",
+    "code_review_blockers": []
+  },
+  "carry_forwards_from_phase_1A_landed": {
+    "code_review_2": {
+      "description": "bump no-float-arithmetic invalid-fixture count beyond 20 (target ~25)",
+      "before": 20,
+      "after": 27,
+      "evidence": "eslint-rules/no-float-arithmetic.test.ts; vitest reports 42 tests in the eslint-rules suite (15 valid + 27 invalid, where each fixture surfaces as its own test)"
     },
-    "github_actions_run_id": "25290884558",
-    "head_commit": "2038fc9d04f40c18789ebf5b53fb513fd9aa16a5",
-    "live_url": "https://porkchop.github.io/icefall/",
-    "playwright_browsers_in_ci": ["chromium", "firefox", "webkit"]
+    "code_review_8": {
+      "description": "unit test that asserts encodeAction emits optional fields in strictly increasing tag order across all 2^k field-presence combinations",
+      "subsets_covered": 8,
+      "sentinel_added": "test asserting Object.keys(encodeMod).filter(k => k.startsWith('TAG_')).length === FIELDS.length, so a future TAG_* addition to encode.ts forces a corresponding FIELDS update or the test fails",
+      "evidence": "src/core/encode.test.ts; vitest reports 28 tests in the encode suite (was 20 pre-Phase-2.0)"
+    }
   },
-  "code_review_status": "Phase 1.B did not produce new application code; the artifact under verification is the Phase 1.A code already reviewed and approved. The CI run on commit 2038fc9 also exercised the linter, typechecker, unit tests, build, and Playwright suite — every gate passed. No code-reviewer reinvocation required.",
-  "qa_playwright_status": "Phase 1.B's qa-playwright equivalent is the CI Playwright job itself (the in-sandbox agent cannot download the Microsoft-hosted browser binaries; the cross-runtime CI job is the authoritative observation). It ran chromium + firefox + webkit on commit 2038fc9 and reported green for the diagnostic suite (4 assertions × 3 engines = 12 passing assertions).",
-  "follow_ups_carried_forward_from_phase_1A": [
-    "code-review #2: bump no-float-arithmetic invalid-fixture count beyond the addendum minimum (currently 20, target ~25) before Phase 2 sim code lands.",
-    "code-review #8: add a unit test that asserts encodeAction emits optional fields in strictly increasing tag order across all 2^k field-presence combinations (defensive against a future field added in source-order rather than tag-order).",
-    "Note: code-review #7 (timeout-minutes: 15 on the build job) was already addressed within the Phase 1.A commit cycle (commit 1de434a) and is now reflected in the live deploy workflow."
-  ],
-  "phase_1_complete": true,
-  "next_phase": "Phase 2 — Map Generation. Drift-detection sweep should fold in the two carried-forward Phase 1.A follow-ups (no-float-arithmetic fixture expansion, encodeAction tag-order combinatoric test) as part of Phase 2's setup, since both are explicitly tagged 'before Phase 2 sim code lands' / preventive against Phase 2-era schema changes."
+  "phases_md_split": {
+    "phase_2_0_acceptance_criteria_added": [
+      "decision-memo-phase-2.md exists and was reviewed by architecture-red-team before any Phase 2 implementation code is written",
+      "red-team review at artifacts/red-team-phase-2.md exists; any blocking issues are addressed via an in-memo addendum",
+      "Phase 1 carry-forward follow-ups #2 and #8 land before Phase 2.A code begins"
+    ],
+    "phase_2_A_acceptance_criteria_partitioned_from_original": [
+      "same (seed, floor) → same floor (golden test on 20-pair fixture pack)",
+      "exactly one entrance + exactly one exit per floor (floor 10 has entrance + boss room)",
+      "all rooms reachable from entrance (runtime invariant + 200-seed property sweep)",
+      "floor 10 structurally distinguished (boss arena reachable from entrance)",
+      "mapgen consumes only streams.mapgen(floorN) — runtime per-call delta guard + lint rule + browser self-test"
+    ],
+    "phase_2_A_acceptance_criteria_added_from_red_team": [
+      "all frozen contracts established by the decision memo (tile codes, JSON shape, registry IDs, ASCII char mapping, base64url alphabet, always-present null-fields, strict parser, seedToBytes) have at least one regression-failing test",
+      "bundle size budget: dist/-gzipped ≤ 75 KB; bundle-report uploaded as a CI artifact",
+      "npm ci && npm run lint && npm run test && npm run build && npm run test:e2e all green inside the sandbox"
+    ],
+    "phase_2_B_acceptance_criteria_partitioned_from_original": [
+      "live GitHub Pages URL serves the updated diagnostic page with the in-browser ASCII floor preview working"
+    ],
+    "phase_2_B_acceptance_criteria_added_from_red_team": [
+      "Phase 2.B Playwright job exercises the preview UI (set seed, set floor, click Generate floor, assert window.__FLOOR_PREVIEW__ === 'ready', assert rendered ASCII matches expected golden output) on chromium / firefox / webkit"
+    ]
+  },
+  "drift_detection": {
+    "purpose": "audit prior phases for overlap with Phase 2 work",
+    "findings": [
+      "src/mapgen/ does not exist yet — no implementation drift to reconcile",
+      "src/registries/ does not exist yet — no registry drift to reconcile",
+      "eslint.config.js already scopes src/mapgen/** with the determinism rules (no-float-arithmetic, FORBIDDEN_TIME, SIM_UNORDERED, no-restricted-imports excluding render+input). Phase 2.A will extend this with a tools/** scope and a streams.sim/streams.ui import ban for src/mapgen/**.",
+      "tools/ does not exist yet; the addendum (resolution of N1) classifies Phase 2 as the establisher of the tools/ boundary, not an inheritor of a Phase-4-precedent that does not yet exist",
+      "src/core/hash.ts:base64url already exists (RFC 4648 §5, unpadded); the addendum (resolution of B1) requires its reuse rather than a new module",
+      "src/core/streams.ts:streamsForRun returns RunStreams as { mapgen, sim, ui }; the addendum (resolution of B4) classifies the additive __consumed extension as a Phase 1 addendum, applied during Phase 2.A"
+    ]
+  },
+  "next_phase": "Phase 2.A — sandbox-verifiable implementation. Will write src/mapgen/, src/registries/, src/core/seed.ts (or merge into streams.ts), extend src/core/streams.ts with __consumed tracker, extend src/core/self-test.ts with two new self-tests (mapgen-cross-runtime-digest, mapgen-stream-isolation), tools/gen-floor.ts CLI, tools/gen-fixtures.ts regenerator, 20-pair fixture pack at tests/fixtures/floors/, extend src/main.ts diagnostic page with the ASCII preview UI, extend eslint.config.js with tools/** scope and streams.sim/streams.ui import ban for src/mapgen/**, update docs/ARCHITECTURE.md with the new layer/contract additions, and configure CI to upload the bundle-report artifact. Phase 2.A is gated by the addendum-pinned frozen contracts (items 1–13) and acceptance criteria above."
 }
