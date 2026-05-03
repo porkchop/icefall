@@ -11,10 +11,16 @@ export default defineConfig({
     trace: "retain-on-failure",
   },
   webServer: {
-    command: "npm run build && npm run preview",
+    // Build is a separate CI step (see .github/workflows/deploy.yml). Locally,
+    // run `npm run build` once before `npm run test:e2e`. The webServer just
+    // serves dist/ — bypassing `npm run` avoids signal-propagation issues
+    // that orphaned vite preview in some shells.
+    command: "npx vite preview --port 4173 --host 127.0.0.1",
     url: "http://127.0.0.1:4173/icefall/",
     reuseExistingServer: !process.env["CI"],
-    timeout: 120_000,
+    timeout: 60_000,
+    stdout: "pipe",
+    stderr: "pipe",
   },
   projects: [
     {

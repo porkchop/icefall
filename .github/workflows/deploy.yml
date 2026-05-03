@@ -32,12 +32,12 @@ jobs:
         run: npm run typecheck
       - name: unit tests + coverage gate
         run: npm test
+      - name: build
+        run: npm run build
       - name: install playwright browsers
         run: npx playwright install --with-deps chromium firefox webkit
       - name: cross-runtime e2e
         run: npm run test:e2e
-      - name: build
-        run: npm run build
       - name: configure pages
         uses: actions/configure-pages@v5
         with:
