@@ -1,0 +1,24 @@
+{
+  "pairs": [
+    { "seed": "seed-A-floor1", "floor": 1 },
+    { "seed": "seed-B-floor1", "floor": 1 },
+    { "seed": "seed-C-floor1", "floor": 1 },
+    { "seed": "seed-D-floor1", "floor": 1 },
+    { "seed": "seed-E-floor1", "floor": 1 },
+    { "seed": "seed-F-floor1", "floor": 1 },
+    { "seed": "seed-G-floor1", "floor": 1 },
+    { "seed": "seed-H-floor1", "floor": 1 },
+    { "seed": "seed-I-floor1", "floor": 1 },
+    { "seed": "seed-J-floor1", "floor": 1 },
+    { "seed": "stack-traversal", "floor": 1 },
+    { "seed": "stack-traversal", "floor": 2 },
+    { "seed": "stack-traversal", "floor": 3 },
+    { "seed": "stack-traversal", "floor": 4 },
+    { "seed": "stack-traversal", "floor": 5 },
+    { "seed": "stack-traversal", "floor": 6 },
+    { "seed": "stack-traversal", "floor": 7 },
+    { "seed": "stack-traversal", "floor": 8 },
+    { "seed": "stack-traversal", "floor": 9 },
+    { "seed": "boss-arena", "floor": 10 }
+  ]
+}

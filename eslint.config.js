@@ -78,6 +78,12 @@ export default tseslint.config(
   },
   {
     files: ["src/core/**/*.ts"],
+    // The self-test composer at `src/core/self-test.ts` is the one
+    // exception — it imports mapgen / registries to wire in the
+    // cross-runtime golden-digest and stream-isolation checks. The
+    // import is one-way (self-test → mapgen) and only inside the
+    // diagnostic harness; it does not introduce a cycle.
+    ignores: ["src/core/self-test.ts"],
     rules: {
       "no-restricted-imports": [
         "error",
@@ -140,10 +146,82 @@ export default tseslint.config(
     },
   },
   {
+    // `tools/**` is the build-time-only Node code surface (memo
+    // addendum N1). Node globals are allowed; render/input layers and
+    // any browser-only path are forbidden. Phase 2 establishes the
+    // boundary; Phase 4 will adopt the same pattern.
+    files: ["tools/**/*.ts"],
+    languageOptions: {
+      globals: {
+        process: "readonly",
+        console: "readonly",
+      },
+    },
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["**/render/**", "**/input/**", "**/main"],
+              message:
+                "tools/ is build-time-only Node code — it must not import the running game's render/input layers or browser entry point.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    // Stream-isolation contract for `src/mapgen/**`: mapgen may only
+    // consume `streams.mapgen(floorN)`. The runtime guard inside
+    // `generateFloor` enforces the per-call delta, but a lint rule
+    // catches the easy mistakes (wrong accessor name) at edit time.
+    //
+    // We can't ban the entire `core/streams` module — mapgen needs
+    // `streamsForRun`, the `RunStreams` type, etc. Instead we ban any
+    // member-expression that *names* `.sim` or `.ui` on any object
+    // inside this scope. This is over-broad in principle (it would
+    // also reject `someObject.sim()` if such a method existed in
+    // mapgen for non-stream reasons), but no other module under
+    // `src/mapgen/**` defines a `.sim` or `.ui` member, so the
+    // false-positive surface is empty.
+    files: ["src/mapgen/**/*.ts"],
+    ignores: ["src/mapgen/**/*.test.ts"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        ...FORBIDDEN_TIME,
+        ...SIM_UNORDERED,
+        {
+          selector:
+            "MemberExpression[property.type='Identifier'][property.name='sim']",
+          message:
+            "mapgen may not access `.sim` on any object — stream-isolation contract (memo decision 7).",
+        },
+        {
+          selector:
+            "MemberExpression[property.type='Identifier'][property.name='ui']",
+          message:
+            "mapgen may not access `.ui` on any object — stream-isolation contract (memo decision 7).",
+        },
+      ],
+    },
+  },
+  {
+    // Tests live under the same scope as the production code they
+    // exercise. Determinism rules — `no-float-arithmetic`, the
+    // `no-restricted-syntax` time/iteration bans — are off inside
+    // tests so a test fixture can construct an "almost-good" floor
+    // (e.g. with a deliberately illegal float) and still drive the
+    // production code's strict path. The production code under test
+    // remains under the full rule set in the layer-scoped overrides
+    // above.
     files: ["**/*.test.ts", "tests/**/*.ts"],
     rules: {
       "no-restricted-syntax": "off",
       "no-restricted-globals": "off",
+      "determinism/no-float-arithmetic": "off",
     },
   },
 );

@@ -190,3 +190,49 @@ describe("streamPrng + streamsForRun", () => {
     ]);
   });
 });
+
+describe("RunStreams.__consumed tracker (frozen contract 11)", () => {
+  it("starts empty before any accessor is called", () => {
+    const streams = streamsForRun(ROOT_A);
+    expect([...streams.__consumed]).toEqual([]);
+  });
+
+  it("records mapgen:floor on first mapgen() call", () => {
+    const streams = streamsForRun(ROOT_A);
+    streams.mapgen(3);
+    expect([...streams.__consumed].sort()).toEqual(["mapgen:3"]);
+  });
+
+  it("records sim and ui keys on those accessors", () => {
+    const streams = streamsForRun(ROOT_A);
+    streams.sim();
+    streams.ui();
+    expect([...streams.__consumed].sort()).toEqual(["sim", "ui"]);
+  });
+
+  it("accumulates keys across calls; per-instance, never global", () => {
+    const a = streamsForRun(ROOT_A);
+    const b = streamsForRun(ROOT_A);
+    a.mapgen(0);
+    a.mapgen(1);
+    b.sim();
+    expect([...a.__consumed].sort()).toEqual(["mapgen:0", "mapgen:1"]);
+    expect([...b.__consumed].sort()).toEqual(["sim"]);
+  });
+
+  it("repeated calls for the same key do not duplicate entries", () => {
+    const streams = streamsForRun(ROOT_A);
+    streams.mapgen(2);
+    streams.mapgen(2);
+    expect([...streams.__consumed]).toEqual(["mapgen:2"]);
+  });
+
+  it("__consumed is a live view: reads after mutation see new entries", () => {
+    const streams = streamsForRun(ROOT_A);
+    const view = streams.__consumed;
+    expect(view.size).toBe(0);
+    streams.mapgen(7);
+    expect(view.size).toBe(1);
+    expect(view.has("mapgen:7")).toBe(true);
+  });
+});

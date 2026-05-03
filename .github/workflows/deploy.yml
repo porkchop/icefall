@@ -34,6 +34,26 @@ jobs:
         run: npm test
       - name: build
         run: npm run build
+      - name: bundle size budget (≤ 75 KB gzipped, memo decision 13)
+        run: |
+          set -e
+          gzip_size=$(find dist/assets -name '*.js' -exec gzip -c {} \; | wc -c)
+          echo "JS gzipped bundle size: ${gzip_size} bytes"
+          if [ "$gzip_size" -gt 76800 ]; then
+            echo "::error::Bundle size ${gzip_size} bytes exceeds 75 KB budget"
+            exit 1
+          fi
+      - name: upload bundle report (memo addendum N5)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bundle-report
+          path: |
+            dist/**/*.js
+            dist/**/*.css
+            dist/index.html
+          if-no-files-found: warn
+          retention-days: 30
       - name: install playwright browsers
         run: npx playwright install --with-deps chromium firefox webkit
       - name: cross-runtime e2e

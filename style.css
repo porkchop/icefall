@@ -133,3 +133,82 @@ body {
   border-left: 2px solid var(--accent);
   padding-left: 10px;
 }
+
+.preview {
+  margin-top: 32px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(160, 175, 200, 0.15);
+}
+
+.preview h2 {
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  margin: 0 0 12px;
+}
+
+.preview-help {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 0 0 12px;
+}
+
+.preview-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.preview-label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.preview-label input,
+.preview-label select {
+  background: rgba(160, 175, 200, 0.08);
+  color: var(--fg);
+  border: 1px solid rgba(160, 175, 200, 0.25);
+  padding: 6px 8px;
+  font-family: inherit;
+  font-size: 13px;
+  border-radius: 3px;
+}
+
+.preview-form button {
+  background: rgba(199, 146, 234, 0.16);
+  color: var(--accent);
+  border: 1px solid rgba(199, 146, 234, 0.5);
+  padding: 8px 14px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 3px;
+  cursor: pointer;
+  align-self: flex-end;
+}
+
+.preview-form button:hover {
+  background: rgba(199, 146, 234, 0.28);
+}
+
+.preview-ascii {
+  background: rgba(0, 0, 0, 0.45);
+  color: var(--fg);
+  padding: 12px;
+  border-radius: 3px;
+  font-size: 11px;
+  line-height: 1.15;
+  overflow-x: auto;
+  white-space: pre;
+  margin: 0;
+  border: 1px solid rgba(160, 175, 200, 0.15);
+}

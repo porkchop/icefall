@@ -47,10 +47,11 @@ in as their phases land.
 |---|---|---|
 | `src/core/` | `@noble/hashes/sha256` only | anything browser-specific (`window`, `document`, `crypto.subtle`), anything async, anything in `src/sim/`, `src/render/`, `src/input/` |
 | `src/sim/` | `src/core/`, `src/registries/` | `Math.random`, `Date.now()`, `performance.now()`, `new Date()`, floating-point arithmetic, iteration over un-ordered collections without `sortedEntries()`, `src/render/`, `src/input/` |
-| `src/mapgen/` | `src/core/`, `src/registries/` | same as `sim/` |
+| `src/mapgen/` | `src/core/`, `src/registries/` | same as `sim/`, plus member-access of `.sim` or `.ui` on any object (stream-isolation lint rule, memo decision 7) |
+| `src/registries/` | none (pure data + types) | anything from `src/sim/`, `src/mapgen/`, `src/render/`, `src/input/` |
 | `src/render/` | `src/core/` (read-only types only), `src/sim/` (read-only state), atlas assets | writing to `src/sim/` state, importing `src/core/streams` or `src/sim/combat` |
 | `src/input/` | none from core/sim/render | writing to `src/sim/` state directly |
-| `tools/` | Node-only modules | the running game's bundle |
+| `tools/` | `src/core/`, `src/mapgen/`, `src/registries/`, Node-only modules | the running game's `src/main.ts`, `src/render/`, `src/input/`, browser-only paths |
 
 These rules are enforced primarily by ESLint configuration scoped via
 `overrides` plus a custom `no-float-arithmetic.cjs` rule under
@@ -107,6 +108,102 @@ Named streams in Phase 1:
 - `streams.mapgen(floorN: int32)` — `name = "mapgen"`, `salts = [floorN]`.
 - `streams.sim()` — `name = "sim"`, `salts = []`.
 - `streams.ui()` — `name = "ui"`, `salts = []`.
+
+### `RunStreams.__consumed` (Phase 2 addition)
+
+The `RunStreams` object returned by `streamsForRun(rootSeed)` carries an
+opaque `__consumed: ReadonlySet<string>` view that records every stream
+key that has been requested through this instance. Each accessor records
+its key on first call:
+
+- `streams.mapgen(floorN)` → records `"mapgen:" + floorN`
+- `streams.sim()`          → records `"sim"`
+- `streams.ui()`           → records `"ui"`
+
+The set is per-`RunStreams` instance (no global state). It is the
+substrate for the mapgen runtime guard: `generateFloor(floorN, streams)`
+snapshots `__consumed` at entry, runs, and asserts at exit that the
+delta is exactly `{"mapgen:" + floorN}` — the per-call invariant pinned
+by the Phase 2 decision memo's addendum (B4).
+
+### Floor data model (Phase 2)
+
+A generated floor is a frozen-shape object:
+
+```ts
+type Floor = {
+  floor: int;            // 1..10
+  width: int;            // 60 for floors 1..9, 40 for floor 10
+  height: int;           // 24 for floors 1..9, 28 for floor 10
+  tiles: Uint8Array;     // length width*height, row-major (tiles[y*w + x])
+  rooms: Room[];         // sorted by id
+  doors: Door[];         // sorted by (y, x)
+  encounters: Encounter[]; // sorted by (kind, y, x)
+  entrance: Point;
+  exit: Point | null;       // null on floor 10
+  bossArena: Rect | null;   // non-null on floor 10
+};
+```
+
+with frozen tile codes:
+
+```
+TILE_VOID  = 0    TILE_WALL  = 2
+TILE_FLOOR = 1    TILE_DOOR  = 3
+```
+
+Codes 4–255 reserved for additive expansion in later phases. Floor 10
+is structurally distinguished: `bossArena !== null` and `exit === null`,
+with the arena occupying a ~20×20 rectangle and one
+`encounter.boss-arena.entry` slot just outside its north door.
+
+### Floor JSON canonical schema (Phase 2)
+
+Top-level keys are emitted in alphabetical order: `bossArena, doors,
+encounters, entrance, exit, floor, height, rooms, schemaVersion,
+tilesB64, tilesShape, width`. **Every key is always present** —
+`bossArena` is JSON `null` for floors 1–9, never omitted; `exit` is JSON
+`null` for floor 10, never omitted. `tilesB64` is RFC 4648 §5 base64url
+(URL-safe alphabet), unpadded — encoded via the existing
+`src/core/hash.ts:base64url`. `parseFloor` is **strict**: unknown
+top-level keys cause it to throw; missing required keys cause it to
+throw; the `bossArena !== null` xor `exit !== null` invariant is
+enforced. Adding a field is a `schemaVersion` bump and a
+`architecture-red-team` review event.
+
+`parseFloor` is invoked only on the output of `serializeFloor`. Phase 8
+will introduce a separate `parseExternalFloor` for hostile-input
+validation when URL-routed floors land.
+
+### Stable-ID registries (Phase 2)
+
+Two registries land in `src/registries/`:
+
+- `rooms.ts` exports `ROOM_KINDS` covering: `room.entrance`, `room.exit`,
+  `room.regular`, `room.boss-arena`, `room.boss-antechamber`. Each entry
+  has placement metadata (size limits, allowed floors).
+- `encounters.ts` exports `ENCOUNTER_KINDS` covering:
+  `encounter.combat.basic`, `encounter.combat.elite`,
+  `encounter.loot.basic`, `encounter.boss-arena.entry`. Each entry has
+  slot-placement metadata (allowed floors, in-room vs corridor vs
+  door-adjacent).
+
+Phase 2 places only the slots; content (which monster spawns at
+`encounter.combat.basic` on floor 4) is Phase 6/7 work. Registries are
+**append-only by convention**; the registry-immutability enforcement
+test is deferred to Phase 6, when a second writer of the registry
+exists.
+
+### `seedToBytes` (Phase 2)
+
+```
+seedToBytes(seed: string) = sha256(utf8(seed))
+```
+
+Maps a user-facing seed string to a 32-byte root seed. Used by mapgen,
+the diagnostic page, and the `tools/gen-floor.ts` CLI before passing
+entropy into `streamsForRun`. Frozen contract — see
+`artifacts/decision-memo-phase-2.md` addendum N2.
 
 ### State-hash chain
 
@@ -214,6 +311,9 @@ unit tests).
 | no `Date.now`, `performance.now`, `new Date()` | `src/core/**`, `src/sim/**`, `src/mapgen/**` | `no-restricted-syntax` selectors and `no-restricted-globals` |
 | no `for..in`, no iteration over `Map`/`Set`/`Object.entries`/`Object.keys`/`Object.values` without `sortedEntries(...)` | `src/sim/**`, `src/mapgen/**` | `no-restricted-syntax` selectors |
 | no float arithmetic | `src/sim/**`, `src/mapgen/**` | custom rule `eslint-rules/no-float-arithmetic.cjs` (see decision memo addendum B6 for full contract) |
+| no `JSON.parse` | `src/sim/**`, `src/mapgen/**` | custom rule `eslint-rules/no-float-arithmetic.cjs` (data ingestion at boundaries only) |
+| no member-access on `.sim` or `.ui` | `src/mapgen/**` | `no-restricted-syntax` selector — stream-isolation contract (memo decision 7); enforces that mapgen consumes only `streams.mapgen(floorN)` |
+| `tools/**` boundary | `tools/**` | `no-restricted-imports` forbids `**/render/**`, `**/input/**`, `**/main` — Node-only build-time code |
 | import boundaries | per layer table above | `no-restricted-imports` patterns scoped via `overrides` |
 
 ## Runtime dependencies
@@ -255,8 +355,16 @@ pushes; it is not part of the CI gate for 1.A.
 ## Operational concerns
 
 - **Bundle size.** Phase 1 budget: ≤ 50 KB minified gzipped for the
-  diagnostic page, including `@noble/hashes/sha256`. Tracked via
-  `vite build --report` output.
+  diagnostic page, including `@noble/hashes/sha256`. Phase 2 raises
+  the budget to ≤ 75 KB to accommodate the BSP generator, the
+  registries, the ASCII renderer, and the URL-hash plumbing. CI fails
+  if `dist/`-gzipped JS exceeds 75 KB and uploads the contents of
+  `dist/` (JS, CSS, HTML) as the `bundle-report` workflow artifact —
+  future phases proposing a budget bump can decompress and inspect.
+  A future enhancement may add `rollup-plugin-visualizer` to emit a
+  treemap (memo addendum N5 originally named the treemap; the artifact
+  shipped today is the build output itself, which is the lower-friction
+  starting point).
 - **Browser support.** Latest two stable Chromium, Firefox, WebKit. No
   IE/legacy.
 - **Deploy pipeline.** Single workflow, `main` only, GH Pages.

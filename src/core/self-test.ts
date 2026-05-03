@@ -1,4 +1,4 @@
-import { sha256Hex, utf8 } from "./hash";
+import { sha256, sha256Hex, utf8, concat } from "./hash";
 import { sfc32 } from "./prng";
 import { genesis, advance } from "./state-chain";
 import { streamPrng, streamsForRun } from "./streams";
@@ -9,6 +9,8 @@ import {
   DEV_PREFIX,
 } from "./fingerprint";
 import { PLACEHOLDER_RULESET_VERSION } from "../build-info";
+import { generateFloor } from "../mapgen/generate";
+import { serializeFloor } from "../mapgen/serialize";
 
 /**
  * Hardcoded golden digest of a 1,000-step random walk over the state
@@ -21,6 +23,22 @@ import { PLACEHOLDER_RULESET_VERSION } from "../build-info";
  */
 export const RANDOM_WALK_DIGEST =
   "142c5ee954cbcd40ea846f00c117bb59828bd61256729b2079c875d2c85dbac4";
+
+/**
+ * Hardcoded golden digest of the canonical-JSON serializations of
+ * floors 1..10 generated from the fixed self-test root seed (`ROOT`),
+ * concatenated as UTF-8 and SHA-256'd.
+ *
+ * Pinning point for cross-runtime mapgen determinism: any silent drift
+ * in BSP partitioning, room placement, corridor carving, encounter
+ * placement, tile encoding, or canonical JSON shape surfaces here in
+ * any runtime (Node, Chromium, Firefox, WebKit).
+ *
+ * Changing this constant is a `rulesetVersion` bump and requires
+ * `architecture-red-team` review per the planning gate.
+ */
+export const MAPGEN_DIGEST =
+  "d212f5cfe17ae03d03433a4119103a003f0ecfee6a2e6c0610a383d506e4473d";
 
 const DIRECTIONS = ["wait", "move", "use", "attack"] as const;
 
@@ -200,6 +218,45 @@ const checks: Check[] = [
       assert(
         got === RANDOM_WALK_DIGEST,
         `random walk digest mismatch: ${got}`,
+      );
+    },
+  },
+  {
+    name: "mapgen-cross-runtime-digest",
+    run() {
+      const parts: Uint8Array[] = [];
+      for (let n = 1; n <= 10; n++) {
+        const streams = streamsForRun(ROOT);
+        const floor = generateFloor(n, streams);
+        parts.push(utf8(serializeFloor(floor)));
+      }
+      const got = sha256Hex(sha256(concat(parts)));
+      assert(
+        got === MAPGEN_DIGEST,
+        `mapgen-cross-runtime-digest mismatch: actual=${got}`,
+      );
+    },
+  },
+  {
+    name: "mapgen-stream-isolation",
+    run() {
+      const streams = streamsForRun(ROOT);
+      const before0 = [...streams.__consumed];
+      assert(
+        before0.length === 0,
+        `expected fresh __consumed empty, got ${JSON.stringify(before0)}`,
+      );
+      generateFloor(1, streams);
+      const after1 = [...streams.__consumed].sort();
+      assert(
+        after1.length === 1 && after1[0] === "mapgen:1",
+        `expected ['mapgen:1'] after first call, got ${JSON.stringify(after1)}`,
+      );
+      generateFloor(2, streams);
+      const after2 = [...streams.__consumed].sort();
+      assert(
+        after2.length === 2 && after2[0] === "mapgen:1" && after2[1] === "mapgen:2",
+        `expected ['mapgen:1','mapgen:2'] after second call, got ${JSON.stringify(after2)}`,
       );
     },
   },

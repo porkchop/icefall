@@ -1,81 +1,59 @@
 {
-  "phase": "phase-2.0",
+  "phase": "phase-2.A",
   "approved": true,
-  "summary": "Phase 2.0 (Planning Gate of Phase 2 — Map Generation) complete. Decision memo authored, architecture-red-team review identified four blocking issues (B1 base64url alphabet/padding + missed reuse, B2 null-field handling, B3 strict-vs-lax parsing, B4 RunStreams contract change + singleton-vs-subset contradiction) and six non-blocking concerns; all four blockers and all six non-blockers are addressed in an in-memo addendum that overrides conflicting prose. The two Phase 1 carry-forward follow-ups explicitly tagged 'before Phase 2 sim code lands' have landed: (#2) eslint-rules/no-float-arithmetic invalid-fixture count expanded from 20 → 27, and (#8) encodeAction tag-order combinatoric test added that walks all 2^3 = 8 subsets of optional Action fields {target, item, dir} plus a sentinel test asserting the test's FIELDS list covers every TAG_* exported from encode.ts. PHASES.md was updated to formally split Phase 2 into Phase 2.0 (planning gate), Phase 2.A (sandbox-verifiable implementation), and Phase 2.B (live deploy verification), with original Phase 2 acceptance criteria partitioned across 2.A (5 criteria) and 2.B (1 criterion) and new 2.A criteria added for the property-style reachability sweep (red-team N4) and bundle-report artifact upload (red-team N5). Phase 2.A implementation may begin in the next phase cycle.",
+  "summary": "Phase 2.A (sandbox-verifiable Map Generation) complete. The full src/mapgen/ module ships: BSP partitioning, room placement, corridor carving with door placement, encounter slotting, floor-10 boss arena override, BFS reachability validation, canonical JSON serialization with strict parser, ASCII renderer, and the public generateFloor entry point with the runtime per-call delta guard on RunStreams.__consumed. Two stable-ID registries (rooms, encounters) committed. Phase 1's core was extended additively per memo addendum B4: streams.ts now exposes RunStreams.__consumed (a per-instance ReadonlySet<string> view) and a new src/core/seed.ts exports seedToBytes(seed) = sha256(utf8(seed)) per addendum N2. Two new self-tests (mapgen-cross-runtime-digest pinning MAPGEN_DIGEST=d212f5cfe17ae03d03433a4119103a003f0ecfee6a2e6c0610a383d506e4473d, mapgen-stream-isolation enforcing per-call singleton delta) joined the diagnostic suite. The eslint config gained a tools/** scope and a src/mapgen/** ban on `.sim`/`.ui` member access (memo decision 7). The CLI tools/gen-floor.ts (with non-integer-floor rejection per code-review N4) and the fixture-pack regenerator tools/gen-fixtures.ts ship; npm run gen-floor and npm run gen-fixtures wire them through vite-node. The fixture pack at tests/fixtures/floors/ contains the 20 (seed, floor) pairs prescribed by memo decision 11 (10 distinct seeds × floor 1, the same seed across floors 1–9, and one floor-10 boss arena), each with a .json and .ascii golden file; the byte-equality regression test in fixture-pack.test.ts exercises every pair plus parseFloor round-trip. The diagnostic page (src/main.ts) was extended with an ASCII floor preview UI (seed input, floor select, generate button, <pre> output, URL-hash deep-link via #seed=foo&floor=N, and window.__FLOOR_PREVIEW__ + window.__FLOOR_PREVIEW_ASCII__ flags for Phase 2.B Playwright). The Playwright e2e suite (tests/e2e/diagnostic.spec.ts) gained two preview assertions. The deploy workflow now enforces the 75-KB gzipped JS budget and uploads a bundle-report artifact (memo addendum N5; current ARCHITECTURE.md prose accurately describes what's shipped vs the original treemap aspiration). docs/ARCHITECTURE.md was updated with the new layer-table rows (src/registries/, tools/, mapgen .sim/.ui ban), the RunStreams.__consumed extension, the floor data model and JSON canonical schema, the seedToBytes contract, and the new lint rule inventory. parseFloor is intentionally not exported from src/mapgen/index.ts per addendum N6 (unit test guards this contract). The code-review verdict was APPROVE WITH NITS, no blockers; nits N1/N2/N4/N5 are addressed in this commit (N3/N6/N7 are documented as cheap follow-ups). Phase 2.B (live deploy verification) is the only remaining Phase 2 work.",
   "decision_memo": "artifacts/decision-memo-phase-2.md",
-  "suggested_commit_message": "phase-2.0: planning gate (decision memo + red-team + addendum + Phase 1 carry-forwards)",
+  "suggested_commit_message": "phase-2.A: deterministic mapgen + registries + CLI + 20-fixture pack + diagnostic preview",
   "verification_sprint": {
-    "purpose": "Confirm Phase 1 (1.A + 1.B) foundation has not drifted before opening Phase 2 work.",
-    "unit_tests": "167 passed (vitest run --coverage); 100% lines / 100% statements / 100% functions on src/core/*; branch 95.97% (uncovered branches limited to self-test.ts lines 59, 63-64, 113-129, unchanged from the Phase 1 baseline)",
-    "lint": "eslint . — 0 errors",
-    "typecheck": "tsc -b --noEmit — 0 errors (TS strict + exactOptionalPropertyTypes + noUncheckedIndexedAccess)",
-    "primary_workflow": "Phase 2.0 ships no user-facing code (planning gate posture); the primary workflow remains the live https://porkchop.github.io/icefall/ diagnostic page, last verified green in commit 2038fc9 per Phase 1.B approval. Phase 2.A will extend the diagnostic page; Phase 2.B will re-verify it live."
+    "purpose": "Confirm Phase 2.A foundation (and the additive Phase 1 contract change) is green before the live-deploy verification gate.",
+    "unit_tests": "411 passed across 27 test files (vitest run --coverage); coverage on src/core/** = 100% lines / 100% statements / 100% functions / 96.12% branches; src/mapgen/** = 100% / 100% / 100% / 98.48%; src/registries/** = 100% / 100% / 100% / 100%. Vitest threshold gates green.",
+    "lint": "eslint . — 0 errors. New tools/** scope and src/mapgen/** .sim/.ui ban verified by sandbox-throwaway violator fixtures.",
+    "typecheck": "tsc -b --noEmit — 0 errors (TS strict + exactOptionalPropertyTypes + noUncheckedIndexedAccess).",
+    "build": "vite build — 0 errors. dist/assets/index-*.js gzipped = 11,800 bytes (~11.5 KB) vs 75 KB budget — 84% headroom.",
+    "primary_workflow": "vite preview at /icefall/ serves the diagnostic page with the new ASCII floor preview section visible below the existing self-tests; window.__FLOOR_PREVIEW__ === 'ready' flips after the initial render, window.__FLOOR_PREVIEW_ASCII__ holds the canonical 60×24 (or 40×28 for floor 10) ASCII grid. CLI npm run gen-floor -- --seed test-cli --floor 1 prints a clean 24-row grid. CLI npm run gen-fixtures regenerates the fixture pack; git diff is empty."
   },
-  "planning_gate": {
-    "decision_memo": "artifacts/decision-memo-phase-2.md",
-    "decisions_recorded": 15,
-    "frozen_contracts_locked": 13,
-    "open_questions_deferred": 3,
-    "red_team_review": "artifacts/red-team-phase-2.md",
-    "red_team_verdict_initial": "REVISE BEFORE IMPLEMENTATION",
-    "red_team_blockers": ["B1", "B2", "B3", "B4"],
-    "red_team_blockers_resolved_in_addendum": ["B1", "B2", "B3", "B4"],
-    "red_team_nonblockers": ["N1", "N2", "N3", "N4", "N5", "N6"],
-    "red_team_nonblockers_resolved_in_addendum": ["N1", "N2", "N3", "N4", "N5", "N6"],
-    "red_team_verdict_after_addendum": "APPROVE WITH ADDENDUM",
-    "code_review": "artifacts/code-review-phase-2-0.md",
-    "code_review_verdict": "APPROVE WITH NITS",
-    "code_review_blockers": []
+  "frozen_contracts_implemented": {
+    "C1_BSP_integer_only": "src/mapgen/bsp.ts — integer-only partitioning with idiv/imod from src/mapgen/math.ts; lint rule no-float-arithmetic confirms.",
+    "C2_floor_dimensions": "src/mapgen/params.ts — STANDARD_FLOOR_WIDTH=60, STANDARD_FLOOR_HEIGHT=24, BOSS_FLOOR_WIDTH=40, BOSS_FLOOR_HEIGHT=28.",
+    "C3_tile_codes": "src/mapgen/tiles.ts — TILE_VOID=0, TILE_FLOOR=1, TILE_WALL=2, TILE_DOOR=3; codes 4–255 reserved.",
+    "C4_floor_json_schema": "src/mapgen/serialize.ts — alphabetical top-level keys, sort orders for doors/encounters/rooms, schemaVersion=1, every key always present.",
+    "C5_tilesB64_base64url": "src/mapgen/serialize.ts reuses src/core/hash.ts:base64url (RFC 4648 §5, unpadded). No new base64 module.",
+    "C6_strict_parser": "src/mapgen/serialize.ts:parseFloor rejects unknown top-level keys, missing keys, schemaVersion ≠ 1, contradictory bossArena/exit pairings, malformed array entries.",
+    "C7_action_descriptor_untouched": "No diff in src/core/encode.ts.",
+    "C8_stream_isolation": "src/mapgen/generate.ts:generateFloor snapshots streams.__consumed at entry/exit, asserts per-call delta is exactly {`mapgen:${floorN}`}; eslint.config.js bans .sim/.ui member access in src/mapgen/**.",
+    "C9_room_kind_ids": "src/registries/rooms.ts — room.entrance, room.exit, room.regular, room.boss-arena, room.boss-antechamber.",
+    "C10_encounter_kind_ids": "src/registries/encounters.ts — encounter.combat.basic, encounter.combat.elite, encounter.loot.basic, encounter.boss-arena.entry.",
+    "C11_seedToBytes": "src/core/seed.ts:seedToBytes(seed) = sha256(utf8(seed)).",
+    "C12_always_present_json_keys": "Verified in committed fixtures: bossArena: null on floors 1–9, exit: null on floor 10, never omitted.",
+    "C13_ascii_overlay_and_newline": "src/mapgen/render-ascii.ts — frozen char map; top-tier exclusivity asserted at generation time and at render time; output is lines.join('\\n') + '\\n' (exactly one trailing newline)."
   },
-  "carry_forwards_from_phase_1A_landed": {
-    "code_review_2": {
-      "description": "bump no-float-arithmetic invalid-fixture count beyond 20 (target ~25)",
-      "before": 20,
-      "after": 27,
-      "evidence": "eslint-rules/no-float-arithmetic.test.ts; vitest reports 42 tests in the eslint-rules suite (15 valid + 27 invalid, where each fixture surfaces as its own test)"
+  "code_review": {
+    "artifact": "artifacts/code-review-phase-2-A.md",
+    "verdict": "APPROVE WITH NITS",
+    "blocking_issues": [],
+    "nonblocking_issues": ["N1", "N2", "N3", "N4", "N5", "N6", "N7"],
+    "nonblockers_addressed_in_this_commit": {
+      "N1": "ARCHITECTURE.md prose updated to accurately describe the bundle-report artifact (build output instead of treemap); rollup-plugin-visualizer treemap noted as a future enhancement.",
+      "N2": "parseFloor removed from src/mapgen/index.ts; fixture-pack test imports it directly from src/mapgen/serialize. New unit test asserts parseFloor is NOT on the public surface.",
+      "N4": "tools/gen-floor.ts now rejects non-integer floor strings (e.g. '1.5') via /^-?\\d+$/ regex before parseInt; new regression test in tools/gen-floor.test.ts.",
+      "N5": "src/core/seed.test.ts golden digest now compares against a hardcoded 64-char hex string (4a56dbf8...) using a local toHex helper, breaking the previous tautology with sha256(utf8(...))."
     },
-    "code_review_8": {
-      "description": "unit test that asserts encodeAction emits optional fields in strictly increasing tag order across all 2^k field-presence combinations",
-      "subsets_covered": 8,
-      "sentinel_added": "test asserting Object.keys(encodeMod).filter(k => k.startsWith('TAG_')).length === FIELDS.length, so a future TAG_* addition to encode.ts forces a corresponding FIELDS update or the test fails",
-      "evidence": "src/core/encode.test.ts; vitest reports 28 tests in the encode suite (was 20 pre-Phase-2.0)"
+    "nonblockers_documented_as_followups": {
+      "N3": "tools/gen-fixtures.ts lacks a dedicated unit test (transitively covered by fixture-pack byte-equality tests).",
+      "N6": "Door-placement coverage is sparse on standard floors (5 of 10 floor-1 fixtures have doors:[]); locked by fixtures, future change is a rulesetVersion bump.",
+      "N7": "decodeBase64Url could relocate to src/core/hash.ts; correctness verified via round-trip tests."
     }
   },
-  "phases_md_split": {
-    "phase_2_0_acceptance_criteria_added": [
-      "decision-memo-phase-2.md exists and was reviewed by architecture-red-team before any Phase 2 implementation code is written",
-      "red-team review at artifacts/red-team-phase-2.md exists; any blocking issues are addressed via an in-memo addendum",
-      "Phase 1 carry-forward follow-ups #2 and #8 land before Phase 2.A code begins"
-    ],
-    "phase_2_A_acceptance_criteria_partitioned_from_original": [
-      "same (seed, floor) → same floor (golden test on 20-pair fixture pack)",
-      "exactly one entrance + exactly one exit per floor (floor 10 has entrance + boss room)",
-      "all rooms reachable from entrance (runtime invariant + 200-seed property sweep)",
-      "floor 10 structurally distinguished (boss arena reachable from entrance)",
-      "mapgen consumes only streams.mapgen(floorN) — runtime per-call delta guard + lint rule + browser self-test"
-    ],
-    "phase_2_A_acceptance_criteria_added_from_red_team": [
-      "all frozen contracts established by the decision memo (tile codes, JSON shape, registry IDs, ASCII char mapping, base64url alphabet, always-present null-fields, strict parser, seedToBytes) have at least one regression-failing test",
-      "bundle size budget: dist/-gzipped ≤ 75 KB; bundle-report uploaded as a CI artifact",
-      "npm ci && npm run lint && npm run test && npm run build && npm run test:e2e all green inside the sandbox"
-    ],
-    "phase_2_B_acceptance_criteria_partitioned_from_original": [
-      "live GitHub Pages URL serves the updated diagnostic page with the in-browser ASCII floor preview working"
-    ],
-    "phase_2_B_acceptance_criteria_added_from_red_team": [
-      "Phase 2.B Playwright job exercises the preview UI (set seed, set floor, click Generate floor, assert window.__FLOOR_PREVIEW__ === 'ready', assert rendered ASCII matches expected golden output) on chromium / firefox / webkit"
-    ]
+  "phase_2_acceptance_criteria_status": {
+    "same_seed_floor_same_floor_json": "PASS — 20-pair fixture pack byte-equality test in tests/fixtures/floors/fixture-pack.test.ts.",
+    "one_entrance_one_exit_floor_10_boss": "PASS — runtime invariant in generateFloor + per-pair invariant test in fixture-pack.test.ts.",
+    "all_rooms_reachable_from_entrance": "PASS — runtime BFS invariant + 200-seed × 10-floor property sweep in src/mapgen/property.test.ts (2,000 floors in ~580 ms, well under 5-second budget).",
+    "floor_10_structurally_distinguished": "PASS — boss arena ≥ BOSS_ARENA_MIN_SIZE × BOSS_ARENA_MIN_SIZE; verified in fixture-pack invariant test for boss-arena__floor10.",
+    "mapgen_consumes_only_mapgen_stream": "PASS — three layers: per-call __consumed delta guard inside generateFloor (frozen contract 11), eslint .sim/.ui ban under src/mapgen/**, mapgen-stream-isolation self-test runs in browser.",
+    "frozen_contracts_have_regression_tests": "PASS — see frozen_contracts_implemented above; each has at least one test.",
+    "bundle_size_75kb": "PASS — 11.5 KB gzipped (84% headroom). CI workflow gate set at 76800 bytes.",
+    "all_sandbox_gates_green": "PASS — npm ci && npm run lint && npm run test && npm run build all green."
   },
-  "drift_detection": {
-    "purpose": "audit prior phases for overlap with Phase 2 work",
-    "findings": [
-      "src/mapgen/ does not exist yet — no implementation drift to reconcile",
-      "src/registries/ does not exist yet — no registry drift to reconcile",
-      "eslint.config.js already scopes src/mapgen/** with the determinism rules (no-float-arithmetic, FORBIDDEN_TIME, SIM_UNORDERED, no-restricted-imports excluding render+input). Phase 2.A will extend this with a tools/** scope and a streams.sim/streams.ui import ban for src/mapgen/**.",
-      "tools/ does not exist yet; the addendum (resolution of N1) classifies Phase 2 as the establisher of the tools/ boundary, not an inheritor of a Phase-4-precedent that does not yet exist",
-      "src/core/hash.ts:base64url already exists (RFC 4648 §5, unpadded); the addendum (resolution of B1) requires its reuse rather than a new module",
-      "src/core/streams.ts:streamsForRun returns RunStreams as { mapgen, sim, ui }; the addendum (resolution of B4) classifies the additive __consumed extension as a Phase 1 addendum, applied during Phase 2.A"
-    ]
-  },
-  "next_phase": "Phase 2.A — sandbox-verifiable implementation. Will write src/mapgen/, src/registries/, src/core/seed.ts (or merge into streams.ts), extend src/core/streams.ts with __consumed tracker, extend src/core/self-test.ts with two new self-tests (mapgen-cross-runtime-digest, mapgen-stream-isolation), tools/gen-floor.ts CLI, tools/gen-fixtures.ts regenerator, 20-pair fixture pack at tests/fixtures/floors/, extend src/main.ts diagnostic page with the ASCII preview UI, extend eslint.config.js with tools/** scope and streams.sim/streams.ui import ban for src/mapgen/**, update docs/ARCHITECTURE.md with the new layer/contract additions, and configure CI to upload the bundle-report artifact. Phase 2.A is gated by the addendum-pinned frozen contracts (items 1–13) and acceptance criteria above."
+  "phase_2_b_remaining": "Phase 2.B (live GitHub Pages verification): observe the deploy workflow run green on the Phase 2.A commit, observe the live URL serves the updated diagnostic page with the ASCII preview rendering, observe the Phase 2.B Playwright job (chromium + firefox + webkit) executes the new preview-UI assertions in tests/e2e/diagnostic.spec.ts and reports green. No additional code expected; if a regression surfaces, that becomes a Phase 2.B blocker and is fixed before approval.",
+  "next_phase": "After Phase 2.B is observed green and approved, Phase 3 (Entity Model, Turn Loop, Combat) begins. Phase 3 will build src/sim/ on top of the deterministic mapgen output; the action descriptor schema (frozen contract 7) becomes load-bearing then."
 }

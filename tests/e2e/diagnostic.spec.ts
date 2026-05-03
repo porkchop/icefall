@@ -47,3 +47,40 @@ test("computed walk digest matches the Node-side constant", async ({
   const digest = await page.evaluate(() => window.__RANDOM_WALK_DIGEST__);
   expect(digest).toBe(RANDOM_WALK_DIGEST);
 });
+
+test("floor preview UI is ready and renders an ASCII grid", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await expect(page.locator("#floor-preview")).toBeVisible();
+  // Wait for the in-page initial render to set the readiness flag.
+  await page.waitForFunction(
+    () => window.__FLOOR_PREVIEW__ === "ready",
+    null,
+    { timeout: 10_000 },
+  );
+  const seedInput = page.locator("#preview-seed");
+  await expect(seedInput).toBeVisible();
+  const ascii = await page.locator("#floor-preview-ascii").innerText();
+  // 60 chars wide × 24 rows for floors 1–9 (default floor=1).
+  const lines = ascii.split("\n");
+  // innerText may strip the trailing newline, so trailing-empty-line count may vary.
+  expect(lines.length).toBeGreaterThanOrEqual(24);
+  expect(lines[0]!.length).toBe(60);
+});
+
+test("floor preview is deterministic — same seed/floor → identical ASCII", async ({
+  page,
+}) => {
+  await page.goto("/#seed=phase2-e2e&floor=3");
+  await page.waitForFunction(
+    () => window.__FLOOR_PREVIEW__ === "ready",
+    null,
+    { timeout: 10_000 },
+  );
+  const a = await page.evaluate(() => window.__FLOOR_PREVIEW_ASCII__);
+  // Click "Generate floor" again with same args → same output.
+  await page.locator("#preview-generate").click();
+  const b = await page.evaluate(() => window.__FLOOR_PREVIEW_ASCII__);
+  expect(a).toBe(b);
+});

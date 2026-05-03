@@ -91,22 +91,40 @@ export function streamPrng(
   return sfc32FromBytes(streamSeed(rootSeed, name, ...salts));
 }
 
+/**
+ * RunStreams gives keyed PRNGs derived from a single root seed. Each
+ * accessor records its key into the per-instance `__consumed` set on
+ * first call, which mapgen's runtime guard reads to assert that floor
+ * generation only consumed the `mapgen:<floorN>` stream.
+ *
+ * `__consumed` is a `ReadonlySet<string>` view; the underlying mutable
+ * set is private to this module. Frozen contract — see
+ * `artifacts/decision-memo-phase-2.md` addendum B4.
+ */
 export type RunStreams = {
   mapgen(floor: number): PRNG;
   sim(): PRNG;
   ui(): PRNG;
+  readonly __consumed: ReadonlySet<string>;
 };
 
 export function streamsForRun(rootSeed: Uint8Array): RunStreams {
+  const consumed = new Set<string>();
   return {
     mapgen(floor: number): PRNG {
+      consumed.add(`mapgen:${floor}`);
       return streamPrng(rootSeed, "mapgen", floor);
     },
     sim(): PRNG {
+      consumed.add("sim");
       return streamPrng(rootSeed, "sim");
     },
     ui(): PRNG {
+      consumed.add("ui");
       return streamPrng(rootSeed, "ui");
+    },
+    get __consumed(): ReadonlySet<string> {
+      return consumed;
     },
   };
 }
