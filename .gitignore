@@ -1,0 +1,7 @@
+# Phasekit — per-user and runtime-only artifacts
+.claude/settings.local.json
+.scaffold/manifest.json.lock
+*.scaffold-tmp
+
+# Add project-language gitignores below as the project takes shape
+# (e.g. node_modules/, .venv/, build/, dist/)
