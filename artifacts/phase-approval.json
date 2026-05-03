@@ -1,71 +1,48 @@
 {
-  "phase": "phase-1A",
+  "phase": "phase-1B",
   "approved": true,
-  "summary": "Phase 1.A (deterministic core + project scaffolding + deploy pipeline files, all in-sandbox deliverables) complete. Phase 1 was split into 1.A (this) and 1.B (live GitHub Pages verification + Playwright cross-runtime against real browsers, both requiring external infrastructure) per architecture-red-team blocker B3. All Phase 1.A acceptance criteria met: 151 tests pass, 100% line coverage on src/core/*, custom determinism lint rules and import-boundary lint rules in place with fixture tests, deploy workflow file written with pinned action versions and required Pages permissions, Playwright config and spec wired in, README has badge and Play live link.",
+  "summary": "Phase 1.B (live GitHub Pages verification + Playwright cross-runtime against real browsers) complete. The external acceptance criteria that were unreachable from the sandbox during Phase 1.A have all now been observed green on the public GitHub Actions run for commit 2038fc9 on master. With Phase 1.A and Phase 1.B both approved, Phase 1 (Deterministic Core + Public Deployment) is complete and Phase 2 (Map Generation) is unblocked.",
   "decision_memo": "artifacts/decision-memo-phase-1.md",
-  "suggested_commit_message": "phase-1A: deterministic core engine + scaffolding + deploy pipeline files",
-  "verification_sprint": null,
-  "verification": {
-    "tests": {
-      "unit": "151 passed (vitest run)",
-      "coverage": "100% lines / 100% statements / 100% functions on src/core/*; branch 95.97% (sub-100 branches are dead-fallback code in self-test renderer + build-info typeof-undefined fallbacks)",
-      "lint": "eslint . — 0 errors",
-      "typecheck": "tsc -b --noEmit — 0 errors (TS strict + exactOptionalPropertyTypes + noUncheckedIndexedAccess)",
-      "build": "vite build — 6.37 KB gzipped (well under 50 KB Phase 1 budget)",
-      "smoke": "python3 -m http.server against dist/ — index.html serves correctly under /icefall/ subpath; bundle contains all expected runtime markers (RANDOM_WALK_DIGEST, self-test-banner, __SELF_TEST_RESULT__, __RANDOM_WALK_DIGEST__, DEV-)"
-    },
-    "blocked_in_sandbox": [
-      "Playwright browser binaries cannot be downloaded (sandbox lacks internet egress to Microsoft CDN). The Playwright config and spec are written and wired into the CI workflow; cross-runtime browser determinism is therefore part of Phase 1.B, not 1.A.",
-      "GitHub Pages deploy cannot run from this sandbox (cannot push to GitHub). The workflow file is written and pinned; live verification is Phase 1.B."
-    ]
+  "suggested_commit_message": "phase-1B: live deploy + cross-runtime Playwright verified green",
+  "verification_sprint": {
+    "purpose": "Confirm Phase 1.A foundation has not drifted before approving the Phase 1 verification gate.",
+    "unit_tests": "151 passed (vitest run --coverage); 100% lines / 100% statements / 100% functions on src/core/*; branch 95.97%",
+    "lint": "eslint . — 0 errors",
+    "typecheck": "tsc -b --noEmit — 0 errors (TS strict + exactOptionalPropertyTypes + noUncheckedIndexedAccess)",
+    "primary_workflow": "Live URL https://porkchop.github.io/icefall/ fetched (HTTP 200 via custom-domain redirect); deployed bundle index-CuSjQP0G.js contains all expected runtime markers (RANDOM_WALK_DIGEST, __SELF_TEST_RESULT__, __RANDOM_WALK_DIGEST__, self-test-banner, DEV-) and both golden digests (142c5ee9… random-walk, ba7816bf… SubtleCrypto canary)."
   },
-  "pending_external_verification": [
-    "github-pages-deploy: workflow runs green within 5 minutes of merge to master",
-    "live-url-self-test: deployed page reports window.__SELF_TEST_RESULT__ === 'green'",
-    "playwright-cross-runtime: chromium + firefox + webkit all assert RANDOM_WALK_DIGEST and __SELF_TEST_RESULT__ === 'green' in CI"
-  ],
-  "follow_ups": [
+  "verification": {
+    "acceptance_criteria": {
+      "deploy_workflow_runs_green_within_5min": {
+        "status": "passed",
+        "evidence": "GitHub Actions run 25290884558 for commit 2038fc9 on master: status=completed, conclusion=success. run_started_at 2026-05-03T21:09:46Z → updated_at 2026-05-03T21:11:39Z = 1m 53s end-to-end, well under the 5-minute cap. Both jobs (build & test, deploy to GitHub Pages) succeeded.",
+        "url": "https://github.com/porkchop/icefall/actions/runs/25290884558"
+      },
+      "live_url_serves_diagnostic_page_green": {
+        "status": "passed",
+        "evidence": "curl https://porkchop.github.io/icefall/ → 301 → custom domain → 200 OK. index.html references /icefall/assets/index-CuSjQP0G.js. Bundle contains markers RANDOM_WALK_DIGEST, __SELF_TEST_RESULT__, __RANDOM_WALK_DIGEST__, self-test-banner, DEV-, and the golden digests 142c5ee954cbcd40ea846f00c117bb59828bd61256729b2079c875d2c85dbac4 (1000-step random walk) and ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad (SubtleCrypto canary). Render-time green-status assertion is also covered by the CI Playwright assertion below."
+      },
+      "readme_play_live_link_resolves": {
+        "status": "passed",
+        "evidence": "README anchor https://porkchop.github.io/icefall/ followed via curl -L returns final 200 OK with the diagnostic HTML."
+      },
+      "cross_runtime_playwright_green": {
+        "status": "passed",
+        "evidence": "Job 74142400478 ('build & test') step 9 'install playwright browsers' (chromium firefox webkit, --with-deps): success; step 10 'cross-runtime e2e' (npm run test:e2e): success. playwright.config.ts defines projects chromium/firefox/webkit with forbidOnly:true and retries:0, so any single-project failure would have failed the step. tests/e2e/diagnostic.spec.ts asserts both window.__SELF_TEST_RESULT__==='green' and window.__RANDOM_WALK_DIGEST__===<golden constant 142c5ee9…> — i.e. cross-runtime determinism end-to-end across all three browser engines."
+      }
+    },
+    "github_actions_run_id": "25290884558",
+    "head_commit": "2038fc9d04f40c18789ebf5b53fb513fd9aa16a5",
+    "live_url": "https://porkchop.github.io/icefall/",
+    "playwright_browsers_in_ci": ["chromium", "firefox", "webkit"]
+  },
+  "code_review_status": "Phase 1.B did not produce new application code; the artifact under verification is the Phase 1.A code already reviewed and approved. The CI run on commit 2038fc9 also exercised the linter, typechecker, unit tests, build, and Playwright suite — every gate passed. No code-reviewer reinvocation required.",
+  "qa_playwright_status": "Phase 1.B's qa-playwright equivalent is the CI Playwright job itself (the in-sandbox agent cannot download the Microsoft-hosted browser binaries; the cross-runtime CI job is the authoritative observation). It ran chromium + firefox + webkit on commit 2038fc9 and reported green for the diagnostic suite (4 assertions × 3 engines = 12 passing assertions).",
+  "follow_ups_carried_forward_from_phase_1A": [
     "code-review #2: bump no-float-arithmetic invalid-fixture count beyond the addendum minimum (currently 20, target ~25) before Phase 2 sim code lands.",
-    "code-review #7: add timeout-minutes: 15 to the build job in .github/workflows/deploy.yml.",
-    "code-review #8: add a unit test that asserts encodeAction emits optional fields in strictly increasing tag order across all 2^k field-presence combinations (defensive against a future field added in source-order rather than tag-order)."
+    "code-review #8: add a unit test that asserts encodeAction emits optional fields in strictly increasing tag order across all 2^k field-presence combinations (defensive against a future field added in source-order rather than tag-order).",
+    "Note: code-review #7 (timeout-minutes: 15 on the build job) was already addressed within the Phase 1.A commit cycle (commit 1de434a) and is now reflected in the live deploy workflow."
   ],
-  "phase_split_rationale": "Phase 1 acceptance criteria included items that require external infrastructure (real GitHub Pages deploy; downloading Playwright browser binaries via Microsoft CDN). Both are unreachable from this sandbox. Per docs/QUALITY_GATES.md 'Discovered work and phase expansion', the phase plan was updated to split Phase 1 into 1.A (in-sandbox) and 1.B (external verification). Phase 2 cannot start until 1.B is also approved.",
-  "files_added_or_changed": {
-    "phase_plan": ["docs/PHASES.md (split Phase 1 → 1.A + 1.B)"],
-    "architecture_doc": ["docs/ARCHITECTURE.md (populated with frozen-contract byte layouts)"],
-    "decision_memo": ["artifacts/decision-memo-phase-1.md (with addendum addressing red-team B1–B6, N4, N5, N7)"],
-    "core": [
-      "src/core/hash.ts",
-      "src/core/prng.ts",
-      "src/core/streams.ts",
-      "src/core/encode.ts",
-      "src/core/state-chain.ts",
-      "src/core/fingerprint.ts",
-      "src/core/self-test.ts"
-    ],
-    "core_tests": [
-      "src/core/hash.test.ts (22 tests)",
-      "src/core/prng.test.ts (12 tests)",
-      "src/core/streams.test.ts (29 tests)",
-      "src/core/encode.test.ts (20 tests)",
-      "src/core/state-chain.test.ts (11 tests)",
-      "src/core/fingerprint.test.ts (18 tests)",
-      "src/core/self-test.test.ts (4 tests)"
-    ],
-    "scaffolding": [
-      "package.json",
-      "tsconfig.json",
-      "vite.config.ts",
-      "vitest.config.ts",
-      "playwright.config.ts",
-      "eslint.config.js",
-      "eslint-rules/no-float-arithmetic.cjs",
-      "eslint-rules/no-float-arithmetic.test.ts (35 tests)",
-      ".gitignore"
-    ],
-    "diagnostic_ui": ["src/main.ts", "src/build-info.ts", "index.html", "style.css"],
-    "ci": [".github/workflows/deploy.yml"],
-    "e2e": ["tests/e2e/diagnostic.spec.ts"],
-    "readme": ["README.md"]
-  }
+  "phase_1_complete": true,
+  "next_phase": "Phase 2 — Map Generation. Drift-detection sweep should fold in the two carried-forward Phase 1.A follow-ups (no-float-arithmetic fixture expansion, encodeAction tag-order combinatoric test) as part of Phase 2's setup, since both are explicitly tagged 'before Phase 2 sim code lands' / preventive against Phase 2-era schema changes."
 }
