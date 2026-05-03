@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
-  "scaffold_version": "0.0.0+git.cecb368",
-  "scaffold_commit": "cecb368",
+  "scaffold_version": "0.0.0+git.9652c80",
+  "scaffold_commit": "9652c80",
   "profile": "game-project",
-  "enriched_at": "2026-05-03T21:08:27Z",
+  "enriched_at": "2026-05-03T21:22:19Z",
   "normalization": {
     "recipe": "lf-trim-trailing-ws-single-final-newline",
     "version": 1
@@ -16,7 +16,7 @@
       "sha256": "c7f349f9b23a5be77c2949f5e349c0ce865502dd88169951a1ecef4de9d1c7ec",
       "sha256_strict": "f5d617575a573db461f320178585c60bce1756b4b4582ca78e207d7922104bc3",
       "overlays": [],
-      "installed_at": "2026-05-03T21:08:27Z"
+      "installed_at": "2026-05-03T21:22:19Z"
     },
     {
       "path": ".claude/agents/strategy-planner.md",
@@ -25,7 +25,7 @@
       "sha256": "de35f52a5ade073fdf5d9b8ef35c13e6b70a063b5673f00b11d5460eafad2a09",
       "sha256_strict": "de35f52a5ade073fdf5d9b8ef35c13e6b70a063b5673f00b11d5460eafad2a09",
       "overlays": [],
-      "installed_at": "2026-05-03T21:08:27Z"
+      "installed_at": "2026-05-03T21:22:19Z"
     },
     {
       "path": ".claude/agents/architecture-red-team.md",
@@ -34,7 +34,7 @@
       "sha256": "59ee3634542f18d5b00a45899b2b75f5d32a361865e96263158d1bfb1849fa5a",
       "sha256_strict": "59ee3634542f18d5b00a45899b2b75f5d32a361865e96263158d1bfb1849fa5a",
       "overlays": [],
-      "installed_at": "2026-05-03T21:08:27Z"
+      "installed_at": "2026-05-03T21:22:19Z"
     },
     {
       "path": ".claude/agents/code-reviewer.md",
@@ -43,7 +43,7 @@
       "sha256": "4f3a5e580d051ebbd8cab2d634963b61aa3682ba33c0a934da0f3396c7685807",
       "sha256_strict": "4f3a5e580d051ebbd8cab2d634963b61aa3682ba33c0a934da0f3396c7685807",
       "overlays": [],
-      "installed_at": "2026-05-03T21:08:27Z"
+      "installed_at": "2026-05-03T21:22:19Z"
     },
     {
       "path": ".claude/agents/qa-playwright.md",
@@ -52,7 +52,7 @@
       "sha256": "7dbd82ac67043f1e9a0c956936316eef720a30dad037e4b177ba681311364f0e",
       "sha256_strict": "7dbd82ac67043f1e9a0c956936316eef720a30dad037e4b177ba681311364f0e",
       "overlays": [],
-      "installed_at": "2026-05-03T21:08:27Z"
+      "installed_at": "2026-05-03T21:22:19Z"
     },
     {
       "path": ".claude/agents/engine-builder.md",
@@ -61,7 +61,7 @@
       "sha256": "5b160f0971615c93d9d4f5ceca24966fec1e58a820b186c8732e99fcd2f6d23a",
       "sha256_strict": "5b160f0971615c93d9d4f5ceca24966fec1e58a820b186c8732e99fcd2f6d23a",
       "overlays": [],
-      "installed_at": "2026-05-03T21:08:27Z"
+      "installed_at": "2026-05-03T21:22:19Z"
     },
     {
       "path": ".claude/agents/frontend-builder.md",
@@ -70,7 +70,7 @@
       "sha256": "3a97fe3011a08ccd89a4aa0b82553e516a32cb82d5e6c2b5d511c9048aa264b2",
       "sha256_strict": "3a97fe3011a08ccd89a4aa0b82553e516a32cb82d5e6c2b5d511c9048aa264b2",
       "overlays": [],
-      "installed_at": "2026-05-03T21:08:27Z"
+      "installed_at": "2026-05-03T21:22:19Z"
     },
     {
       "path": ".claude/agents/backend-builder.md",
@@ -79,7 +79,7 @@
       "sha256": "8aa3b0da765062bcc665177d4a0ea47569ca0dc593f3b5e0d954f77af1843850",
       "sha256_strict": "8aa3b0da765062bcc665177d4a0ea47569ca0dc593f3b5e0d954f77af1843850",
       "overlays": [],
-      "installed_at": "2026-05-03T21:08:27Z"
+      "installed_at": "2026-05-03T21:22:19Z"
     },
     {
       "path": ".claude/agents/release-hardening.md",
@@ -88,7 +88,7 @@
       "sha256": "e910eb0b9910e172329f8198181c0a04671456393f833e65bf984af8799168e1",
       "sha256_strict": "e910eb0b9910e172329f8198181c0a04671456393f833e65bf984af8799168e1",
       "overlays": [],
-      "installed_at": "2026-05-03T21:08:27Z"
+      "installed_at": "2026-05-03T21:22:19Z"
     },
     {
       "path": "docs/SPEC.md",
@@ -97,7 +97,7 @@
       "sha256": "21be064da3ff17535f9af6fe3f781eadfec04666175d0c09a4645de818a855c7",
       "sha256_strict": "21be064da3ff17535f9af6fe3f781eadfec04666175d0c09a4645de818a855c7",
       "overlays": [],
-      "installed_at": "2026-05-03T21:08:27Z"
+      "installed_at": "2026-05-03T21:22:19Z"
     },
     {
       "path": "docs/ARCHITECTURE.md",
@@ -106,7 +106,7 @@
       "sha256": "f315f723d8d91bee6ad9d55133ef88d8ac8836b43044ee0e60e1ddb50e7a3741",
       "sha256_strict": "f315f723d8d91bee6ad9d55133ef88d8ac8836b43044ee0e60e1ddb50e7a3741",
       "overlays": [],
-      "installed_at": "2026-05-03T21:08:27Z"
+      "installed_at": "2026-05-03T21:22:19Z"
     },
     {
       "path": "docs/PHASES.md",
@@ -115,7 +115,7 @@
       "sha256": "7b1d60f8cb24aa8b420ddb8d4dfc02015867e5653d21924fc1dfdbfb555b2fc2",
       "sha256_strict": "9ead614adcdb5534cfab0e53b7ce8f7b4f1938b782ac5d7adda334d86247da1c",
       "overlays": [],
-      "installed_at": "2026-05-03T21:08:27Z"
+      "installed_at": "2026-05-03T21:22:19Z"
     },
     {
       "path": "docs/QUALITY_GATES.md",
@@ -124,7 +124,7 @@
       "sha256": "68a1f4dd9efd226943246bfe085f9ed336bd3e6d58df25ca2ed29716df93cbe2",
       "sha256_strict": "4d6a59486743886164d1fffea6b3a8491a1b47577d953fd53c4478992af3ab50",
       "overlays": [],
-      "installed_at": "2026-05-03T21:08:27Z"
+      "installed_at": "2026-05-03T21:22:19Z"
     },
     {
       "path": "docs/PROD_REQUIREMENTS.md",
@@ -133,7 +133,7 @@
       "sha256": "b8752c271509d982c3bfc824e4e5291fe6933b80ca988de981414f26d8c39fed",
       "sha256_strict": "b8752c271509d982c3bfc824e4e5291fe6933b80ca988de981414f26d8c39fed",
       "overlays": [],
-      "installed_at": "2026-05-03T21:08:27Z"
+      "installed_at": "2026-05-03T21:22:19Z"
     },
     {
       "path": "docs/USAGE_PATTERNS.md",
@@ -142,16 +142,16 @@
       "sha256": "2d52e9dbc7206c04d560d689123b01b1ff5c398b34ef0370f5593fecc072cf7d",
       "sha256_strict": "2d52e9dbc7206c04d560d689123b01b1ff5c398b34ef0370f5593fecc072cf7d",
       "overlays": [],
-      "installed_at": "2026-05-03T21:08:27Z"
+      "installed_at": "2026-05-03T21:22:19Z"
     },
     {
       "path": "docs/EXECUTION_MODES.md",
       "ownership": "scaffold",
       "text": true,
-      "sha256": "60ef9b8bf517b9c19f4a1c42ac9e4bce0567680e16ba74e29741d7200eed1a12",
-      "sha256_strict": "60ef9b8bf517b9c19f4a1c42ac9e4bce0567680e16ba74e29741d7200eed1a12",
+      "sha256": "b2d5532d75de47e85886f030fdffb85620e317324e41fa4e8b5b6ef4954dbad9",
+      "sha256_strict": "b2d5532d75de47e85886f030fdffb85620e317324e41fa4e8b5b6ef4954dbad9",
       "overlays": [],
-      "installed_at": "2026-05-03T21:08:27Z"
+      "installed_at": "2026-05-03T21:22:19Z"
     },
     {
       "path": "docs/REASONING_PROFILES.md",
@@ -160,7 +160,7 @@
       "sha256": "74dbf3f4d96d669e65f22d702c467ab844a4fa0ac8c978e44c3020a04881e3d4",
       "sha256_strict": "74dbf3f4d96d669e65f22d702c467ab844a4fa0ac8c978e44c3020a04881e3d4",
       "overlays": [],
-      "installed_at": "2026-05-03T21:08:27Z"
+      "installed_at": "2026-05-03T21:22:19Z"
     },
     {
       "path": "docs/ADR_TEMPLATE.md",
@@ -169,7 +169,7 @@
       "sha256": "d337b2ef7676afd275edfd1c57a90cf3722d5d37cc281430530256b3e7ed2fc7",
       "sha256_strict": "d337b2ef7676afd275edfd1c57a90cf3722d5d37cc281430530256b3e7ed2fc7",
       "overlays": [],
-      "installed_at": "2026-05-03T21:08:27Z"
+      "installed_at": "2026-05-03T21:22:19Z"
     },
     {
       "path": "docs/CONTAINERIZATION.md",
@@ -178,7 +178,7 @@
       "sha256": "91475acd828ff3daec1ec07df3ca769a953a5b33b2b94973640c185603b78fe0",
       "sha256_strict": "91475acd828ff3daec1ec07df3ca769a953a5b33b2b94973640c185603b78fe0",
       "overlays": [],
-      "installed_at": "2026-05-03T21:08:27Z"
+      "installed_at": "2026-05-03T21:22:19Z"
     },
     {
       "path": "docs/INSTALL_LIFECYCLE.md",
@@ -187,7 +187,7 @@
       "sha256": "e057ab70e0475c71b0a6ba751bd03d85461946673b094d5122851fb9664fefed",
       "sha256_strict": "e057ab70e0475c71b0a6ba751bd03d85461946673b094d5122851fb9664fefed",
       "overlays": [],
-      "installed_at": "2026-05-03T21:08:27Z"
+      "installed_at": "2026-05-03T21:22:19Z"
     },
     {
       "path": ".claude/hooks/deny-dangerous-commands.sh",
@@ -196,7 +196,7 @@
       "sha256": "a8d4e461a079c46ed52e07f32e39bf3b4531643fe66df80eeced06bf8b2e4087",
       "sha256_strict": "a8d4e461a079c46ed52e07f32e39bf3b4531643fe66df80eeced06bf8b2e4087",
       "overlays": [],
-      "installed_at": "2026-05-03T21:08:27Z"
+      "installed_at": "2026-05-03T21:22:19Z"
     },
     {
       "path": "scripts/run-phase.sh",
@@ -205,7 +205,7 @@
       "sha256": "ceb6ed2f2658d3a36a76e607b884ba959564b4e99ca54975180687a0f00d4b8d",
       "sha256_strict": "d38e1ac466ff9cc36b9ff8f554cc0cc5739efa1b0386a00b3064ecaf7965394c",
       "overlays": [],
-      "installed_at": "2026-05-03T21:08:27Z"
+      "installed_at": "2026-05-03T21:22:19Z"
     },
     {
       "path": "scripts/run-until-done.sh",
@@ -214,7 +214,7 @@
       "sha256": "111a92feb818b97c86c5dc218ab0b13b37b4287b618c101c6c8f7eafb96114b0",
       "sha256_strict": "5f3de881254a5537ba598cf2732c55f30878e7edd0983bffc95d0c0877b45ba9",
       "overlays": [],
-      "installed_at": "2026-05-03T21:08:27Z"
+      "installed_at": "2026-05-03T21:22:19Z"
     },
     {
       "path": ".claude/settings.json",
@@ -223,7 +223,7 @@
       "sha256": "18f21a230550abd5935c28de5068912e3fb1bc48f9e62170a6fbc9f0786441e9",
       "sha256_strict": "18f21a230550abd5935c28de5068912e3fb1bc48f9e62170a6fbc9f0786441e9",
       "overlays": [],
-      "installed_at": "2026-05-03T21:08:27Z",
+      "installed_at": "2026-05-03T21:22:19Z",
       "rendered_from": "templates/settings.template.json",
       "template_sha": "18f21a230550abd5935c28de5068912e3fb1bc48f9e62170a6fbc9f0786441e9"
     },
@@ -234,7 +234,7 @@
       "sha256": "cca3ad431044803f723aaefce2f1b42bde99dca2930342571217ce277b321ba4",
       "sha256_strict": "1ebef925332f3be2d41bd8aaa66164e73ef49e3c814658bee938b0646972293b",
       "overlays": [],
-      "installed_at": "2026-05-03T21:08:27Z",
+      "installed_at": "2026-05-03T21:22:19Z",
       "rendered_from": "templates/CLAUDE.template.md",
       "template_sha": "7983e31d0b1f3bd34fc64abb4d3512f08d57fd52a6e5dea0b3b00a398f28f15e"
     },
@@ -245,7 +245,7 @@
       "sha256": "e09480d020e2fc2db810569277b121cff50f9e1056a49bfd8cc0f3a63612695f",
       "sha256_strict": "e09480d020e2fc2db810569277b121cff50f9e1056a49bfd8cc0f3a63612695f",
       "overlays": [],
-      "installed_at": "2026-05-03T21:08:27Z",
+      "installed_at": "2026-05-03T21:22:19Z",
       "rendered_from": "templates/AGENTS.template.md",
       "template_sha": "cc221b3aeeab2b90b57d78e44a3bf7fed11a4907fea3faf67b66ce99c984b4d6"
     },
@@ -256,16 +256,16 @@
       "sha256": "3955caa6679634edba0092ba67741acae4d49b13476e788ca1ed6a6a2caac780",
       "sha256_strict": "348ec4df72ac12e90d274e89de4d38617d1c4dc1cffe3b87bb851eb4ae07ae22",
       "overlays": [],
-      "installed_at": "2026-05-03T21:08:27Z"
+      "installed_at": "2026-05-03T21:22:19Z"
     },
     {
       "path": "scripts/container-setup.sh",
       "ownership": "scaffold",
       "text": true,
-      "sha256": "0b6b2502cd3c33c738f882d3e4510584186cadef826df5b6ab6d3a8d3416e4da",
-      "sha256_strict": "0b6b2502cd3c33c738f882d3e4510584186cadef826df5b6ab6d3a8d3416e4da",
+      "sha256": "8254933cc93c6c83a6f2b4846aa2bd00038d49b066579b808f639bffd3f265a5",
+      "sha256_strict": "8254933cc93c6c83a6f2b4846aa2bd00038d49b066579b808f639bffd3f265a5",
       "overlays": [],
-      "installed_at": "2026-05-03T21:08:27Z"
+      "installed_at": "2026-05-03T21:22:19Z"
     },
     {
       "path": "scripts/verify-container.sh",
@@ -274,7 +274,7 @@
       "sha256": "6b340d3de624a5c6438d06f83bfd5bae1f1f9a8fd486235a2a1c67b3c55ac2ca",
       "sha256_strict": "6b340d3de624a5c6438d06f83bfd5bae1f1f9a8fd486235a2a1c67b3c55ac2ca",
       "overlays": [],
-      "installed_at": "2026-05-03T21:08:27Z"
+      "installed_at": "2026-05-03T21:22:19Z"
     },
     {
       "path": "scripts/phasekit.sh",
@@ -283,7 +283,7 @@
       "sha256": "1587514b63e668147a79ac32993a4b12a2e0ac3ff63de342da8ca654a541b140",
       "sha256_strict": "1587514b63e668147a79ac32993a4b12a2e0ac3ff63de342da8ca654a541b140",
       "overlays": [],
-      "installed_at": "2026-05-03T21:08:27Z"
+      "installed_at": "2026-05-03T21:22:19Z"
     },
     {
       "path": ".devcontainer/devcontainer.json",
@@ -292,7 +292,7 @@
       "sha256": "75ac2e93c43f5d8821e3d9d0615c3b3cfed3899d1f5bfc86162919c6e74aeb47",
       "sha256_strict": "75ac2e93c43f5d8821e3d9d0615c3b3cfed3899d1f5bfc86162919c6e74aeb47",
       "overlays": [],
-      "installed_at": "2026-05-03T21:08:27Z"
+      "installed_at": "2026-05-03T21:22:19Z"
     },
     {
       "path": ".devcontainer/Dockerfile",
@@ -301,7 +301,7 @@
       "sha256": "b70d709b832242cf280baf4fca97b776e16c483982f1f4833791d777d5cca653",
       "sha256_strict": "b70d709b832242cf280baf4fca97b776e16c483982f1f4833791d777d5cca653",
       "overlays": [],
-      "installed_at": "2026-05-03T21:08:27Z"
+      "installed_at": "2026-05-03T21:22:19Z"
     },
     {
       "path": ".devcontainer/entrypoint.sh",
@@ -310,7 +310,7 @@
       "sha256": "58ac0aeb4950208af2428aba3dcbf49c84bab6e0500d30a499cf9f29bfa9bc0f",
       "sha256_strict": "58ac0aeb4950208af2428aba3dcbf49c84bab6e0500d30a499cf9f29bfa9bc0f",
       "overlays": [],
-      "installed_at": "2026-05-03T21:08:27Z"
+      "installed_at": "2026-05-03T21:22:19Z"
     },
     {
       "path": ".devcontainer/init-firewall.sh",
@@ -319,7 +319,7 @@
       "sha256": "0adb4ca9d895c34265df91238e2b3162e575488481aa520b70eb265ca9e27f9c",
       "sha256_strict": "0adb4ca9d895c34265df91238e2b3162e575488481aa520b70eb265ca9e27f9c",
       "overlays": [],
-      "installed_at": "2026-05-03T21:08:27Z"
+      "installed_at": "2026-05-03T21:22:19Z"
     }
   ]
 }
