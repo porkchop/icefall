@@ -1,59 +1,54 @@
 {
-  "phase": "phase-2.A",
+  "phase": "phase-2.B",
   "approved": true,
-  "summary": "Phase 2.A (sandbox-verifiable Map Generation) complete. The full src/mapgen/ module ships: BSP partitioning, room placement, corridor carving with door placement, encounter slotting, floor-10 boss arena override, BFS reachability validation, canonical JSON serialization with strict parser, ASCII renderer, and the public generateFloor entry point with the runtime per-call delta guard on RunStreams.__consumed. Two stable-ID registries (rooms, encounters) committed. Phase 1's core was extended additively per memo addendum B4: streams.ts now exposes RunStreams.__consumed (a per-instance ReadonlySet<string> view) and a new src/core/seed.ts exports seedToBytes(seed) = sha256(utf8(seed)) per addendum N2. Two new self-tests (mapgen-cross-runtime-digest pinning MAPGEN_DIGEST=d212f5cfe17ae03d03433a4119103a003f0ecfee6a2e6c0610a383d506e4473d, mapgen-stream-isolation enforcing per-call singleton delta) joined the diagnostic suite. The eslint config gained a tools/** scope and a src/mapgen/** ban on `.sim`/`.ui` member access (memo decision 7). The CLI tools/gen-floor.ts (with non-integer-floor rejection per code-review N4) and the fixture-pack regenerator tools/gen-fixtures.ts ship; npm run gen-floor and npm run gen-fixtures wire them through vite-node. The fixture pack at tests/fixtures/floors/ contains the 20 (seed, floor) pairs prescribed by memo decision 11 (10 distinct seeds × floor 1, the same seed across floors 1–9, and one floor-10 boss arena), each with a .json and .ascii golden file; the byte-equality regression test in fixture-pack.test.ts exercises every pair plus parseFloor round-trip. The diagnostic page (src/main.ts) was extended with an ASCII floor preview UI (seed input, floor select, generate button, <pre> output, URL-hash deep-link via #seed=foo&floor=N, and window.__FLOOR_PREVIEW__ + window.__FLOOR_PREVIEW_ASCII__ flags for Phase 2.B Playwright). The Playwright e2e suite (tests/e2e/diagnostic.spec.ts) gained two preview assertions. The deploy workflow now enforces the 75-KB gzipped JS budget and uploads a bundle-report artifact (memo addendum N5; current ARCHITECTURE.md prose accurately describes what's shipped vs the original treemap aspiration). docs/ARCHITECTURE.md was updated with the new layer-table rows (src/registries/, tools/, mapgen .sim/.ui ban), the RunStreams.__consumed extension, the floor data model and JSON canonical schema, the seedToBytes contract, and the new lint rule inventory. parseFloor is intentionally not exported from src/mapgen/index.ts per addendum N6 (unit test guards this contract). The code-review verdict was APPROVE WITH NITS, no blockers; nits N1/N2/N4/N5 are addressed in this commit (N3/N6/N7 are documented as cheap follow-ups). Phase 2.B (live deploy verification) is the only remaining Phase 2 work.",
+  "summary": "Phase 2.B (live GitHub Pages verification of the Phase 2.A mapgen + ASCII preview deliverable) complete. The external acceptance criteria that were unreachable from the sandbox during Phase 2.A have all now been observed green on the public GitHub Actions run for commit 394801f on master. With Phase 2.0, 2.A, and 2.B all approved, Phase 2 (Map Generation) is complete and Phase 3 (Entity Model, Turn Loop, Combat) is unblocked.",
   "decision_memo": "artifacts/decision-memo-phase-2.md",
-  "suggested_commit_message": "phase-2.A: deterministic mapgen + registries + CLI + 20-fixture pack + diagnostic preview",
+  "suggested_commit_message": "phase-2.B: live deploy + cross-runtime Playwright preview verified green",
   "verification_sprint": {
-    "purpose": "Confirm Phase 2.A foundation (and the additive Phase 1 contract change) is green before the live-deploy verification gate.",
-    "unit_tests": "411 passed across 27 test files (vitest run --coverage); coverage on src/core/** = 100% lines / 100% statements / 100% functions / 96.12% branches; src/mapgen/** = 100% / 100% / 100% / 98.48%; src/registries/** = 100% / 100% / 100% / 100%. Vitest threshold gates green.",
-    "lint": "eslint . — 0 errors. New tools/** scope and src/mapgen/** .sim/.ui ban verified by sandbox-throwaway violator fixtures.",
-    "typecheck": "tsc -b --noEmit — 0 errors (TS strict + exactOptionalPropertyTypes + noUncheckedIndexedAccess).",
-    "build": "vite build — 0 errors. dist/assets/index-*.js gzipped = 11,800 bytes (~11.5 KB) vs 75 KB budget — 84% headroom.",
-    "primary_workflow": "vite preview at /icefall/ serves the diagnostic page with the new ASCII floor preview section visible below the existing self-tests; window.__FLOOR_PREVIEW__ === 'ready' flips after the initial render, window.__FLOOR_PREVIEW_ASCII__ holds the canonical 60×24 (or 40×28 for floor 10) ASCII grid. CLI npm run gen-floor -- --seed test-cli --floor 1 prints a clean 24-row grid. CLI npm run gen-fixtures regenerates the fixture pack; git diff is empty."
+    "purpose": "Confirm the Phase 2.A foundation has not drifted before approving the Phase 2 verification gate.",
+    "unit_tests": "411 passed (vitest run --coverage); 100% lines / 100% statements / 100% functions on src/core/**, src/mapgen/**, src/registries/** (last verified locally at HEAD of phase-2.A).",
+    "lint": "eslint . — 0 errors (CI run 25294232381 step 'lint': success)",
+    "typecheck": "tsc -b --noEmit — 0 errors (CI run 25294232381 step 'typecheck': success)",
+    "primary_workflow": "Live URL https://porkchop.github.io/icefall/ fetched (HTTP 200); deployed bundle index-CzKLE1eJ.js contains all expected runtime markers: self-test-banner, self-test passed, RANDOM_WALK_DIGEST, FLOOR_PREVIEW (Phase 2.A flag), Floor preview (UI heading), Phase 2 mapgen (UI subtitle), Generate floor (button label), preview-seed (input id), TILE_FLOOR (registry import). Deep-link form https://porkchop.github.io/icefall/#seed=phase2-witness&floor=3 also returns HTTP 200."
   },
-  "frozen_contracts_implemented": {
-    "C1_BSP_integer_only": "src/mapgen/bsp.ts — integer-only partitioning with idiv/imod from src/mapgen/math.ts; lint rule no-float-arithmetic confirms.",
-    "C2_floor_dimensions": "src/mapgen/params.ts — STANDARD_FLOOR_WIDTH=60, STANDARD_FLOOR_HEIGHT=24, BOSS_FLOOR_WIDTH=40, BOSS_FLOOR_HEIGHT=28.",
-    "C3_tile_codes": "src/mapgen/tiles.ts — TILE_VOID=0, TILE_FLOOR=1, TILE_WALL=2, TILE_DOOR=3; codes 4–255 reserved.",
-    "C4_floor_json_schema": "src/mapgen/serialize.ts — alphabetical top-level keys, sort orders for doors/encounters/rooms, schemaVersion=1, every key always present.",
-    "C5_tilesB64_base64url": "src/mapgen/serialize.ts reuses src/core/hash.ts:base64url (RFC 4648 §5, unpadded). No new base64 module.",
-    "C6_strict_parser": "src/mapgen/serialize.ts:parseFloor rejects unknown top-level keys, missing keys, schemaVersion ≠ 1, contradictory bossArena/exit pairings, malformed array entries.",
-    "C7_action_descriptor_untouched": "No diff in src/core/encode.ts.",
-    "C8_stream_isolation": "src/mapgen/generate.ts:generateFloor snapshots streams.__consumed at entry/exit, asserts per-call delta is exactly {`mapgen:${floorN}`}; eslint.config.js bans .sim/.ui member access in src/mapgen/**.",
-    "C9_room_kind_ids": "src/registries/rooms.ts — room.entrance, room.exit, room.regular, room.boss-arena, room.boss-antechamber.",
-    "C10_encounter_kind_ids": "src/registries/encounters.ts — encounter.combat.basic, encounter.combat.elite, encounter.loot.basic, encounter.boss-arena.entry.",
-    "C11_seedToBytes": "src/core/seed.ts:seedToBytes(seed) = sha256(utf8(seed)).",
-    "C12_always_present_json_keys": "Verified in committed fixtures: bossArena: null on floors 1–9, exit: null on floor 10, never omitted.",
-    "C13_ascii_overlay_and_newline": "src/mapgen/render-ascii.ts — frozen char map; top-tier exclusivity asserted at generation time and at render time; output is lines.join('\\n') + '\\n' (exactly one trailing newline)."
-  },
-  "code_review": {
-    "artifact": "artifacts/code-review-phase-2-A.md",
-    "verdict": "APPROVE WITH NITS",
-    "blocking_issues": [],
-    "nonblocking_issues": ["N1", "N2", "N3", "N4", "N5", "N6", "N7"],
-    "nonblockers_addressed_in_this_commit": {
-      "N1": "ARCHITECTURE.md prose updated to accurately describe the bundle-report artifact (build output instead of treemap); rollup-plugin-visualizer treemap noted as a future enhancement.",
-      "N2": "parseFloor removed from src/mapgen/index.ts; fixture-pack test imports it directly from src/mapgen/serialize. New unit test asserts parseFloor is NOT on the public surface.",
-      "N4": "tools/gen-floor.ts now rejects non-integer floor strings (e.g. '1.5') via /^-?\\d+$/ regex before parseInt; new regression test in tools/gen-floor.test.ts.",
-      "N5": "src/core/seed.test.ts golden digest now compares against a hardcoded 64-char hex string (4a56dbf8...) using a local toHex helper, breaking the previous tautology with sha256(utf8(...))."
+  "verification": {
+    "acceptance_criteria": {
+      "deploy_workflow_runs_green_within_5min": {
+        "status": "passed",
+        "evidence": "GitHub Actions run 25294232381 for commit 394801f on master: status=completed, conclusion=success. run_started_at 2026-05-03T23:43:43Z → updated_at 2026-05-03T23:45:22Z = 1m 39s end-to-end, well under the 5-minute cap. Both jobs (build & test, deploy to GitHub Pages) succeeded with all 17 build-test steps and 3 deploy steps green.",
+        "url": "https://github.com/porkchop/icefall/actions/runs/25294232381"
+      },
+      "live_url_serves_updated_diagnostic_with_ascii_preview": {
+        "status": "passed",
+        "evidence": "curl -sSL https://porkchop.github.io/icefall/ → 200 OK. index.html references /icefall/assets/index-CzKLE1eJ.js. Bundle contains all Phase 2.A markers: self-test-banner, self-test passed, RANDOM_WALK_DIGEST (Phase 1 carry-over), FLOOR_PREVIEW (window flag), Floor preview (h2 text), Phase 2 mapgen (preview subtitle), Generate floor (submit button label), preview-seed (input id), TILE_FLOOR (mapgen import). The render-time green-status assertion is also covered by the cross-runtime Playwright assertion below."
+      },
+      "phase_2b_playwright_preview_assertions_green_on_chromium_firefox_webkit": {
+        "status": "passed",
+        "evidence": "Job 'build & test' step 'install playwright browsers' (chromium firefox webkit, --with-deps): success in 50s. Step 'cross-runtime e2e' (npm run test:e2e): success in 14s. playwright.config.ts defines projects chromium/firefox/webkit with forbidOnly:true and retries:0, so any single-project failure would have failed the step. tests/e2e/diagnostic.spec.ts now contains six tests (4 from Phase 1.B carry-over + 2 added by Phase 2.A): self-test green; cross-runtime random-walk digest; build info DEV- fingerprint; Node-side digest match; 'floor preview UI is ready and renders an ASCII grid' (asserts window.__FLOOR_PREVIEW__ === 'ready' plus 60-char-wide rows); 'floor preview is deterministic — same seed/floor → identical ASCII' (loads /icefall/#seed=phase2-e2e&floor=3, captures window.__FLOOR_PREVIEW_ASCII__, clicks Generate floor, captures again, asserts equality). 6 tests × 3 engines = 18 cross-runtime assertions green."
+      },
+      "bundle_size_budget_75kb": {
+        "status": "passed",
+        "evidence": "Job 'build & test' step 'bundle size budget (≤ 75 KB gzipped, memo decision 13)': success. The local Phase 2.A build measured the gzipped JS at ~11.5 KB (84% headroom). The CI gate uses `find dist/assets -name '*.js' -exec gzip -c {} \\; | wc -c` against a 76800-byte threshold."
+      },
+      "bundle_report_artifact_uploaded": {
+        "status": "passed",
+        "evidence": "Workflow artifact 'bundle-report' = 13,439 bytes, expired=false. Future phases reviewing budget bumps can download and inspect."
+      }
     },
-    "nonblockers_documented_as_followups": {
-      "N3": "tools/gen-fixtures.ts lacks a dedicated unit test (transitively covered by fixture-pack byte-equality tests).",
-      "N6": "Door-placement coverage is sparse on standard floors (5 of 10 floor-1 fixtures have doors:[]); locked by fixtures, future change is a rulesetVersion bump.",
-      "N7": "decodeBase64Url could relocate to src/core/hash.ts; correctness verified via round-trip tests."
-    }
+    "github_actions_run_id": "25294232381",
+    "head_commit": "394801fa8586a6b11eadeb6bfe554a09ee1857e0",
+    "live_url": "https://porkchop.github.io/icefall/",
+    "deep_link_example": "https://porkchop.github.io/icefall/#seed=phase2-witness&floor=3",
+    "playwright_browsers_in_ci": ["chromium", "firefox", "webkit"],
+    "live_bundle_asset": "/icefall/assets/index-CzKLE1eJ.js"
   },
-  "phase_2_acceptance_criteria_status": {
-    "same_seed_floor_same_floor_json": "PASS — 20-pair fixture pack byte-equality test in tests/fixtures/floors/fixture-pack.test.ts.",
-    "one_entrance_one_exit_floor_10_boss": "PASS — runtime invariant in generateFloor + per-pair invariant test in fixture-pack.test.ts.",
-    "all_rooms_reachable_from_entrance": "PASS — runtime BFS invariant + 200-seed × 10-floor property sweep in src/mapgen/property.test.ts (2,000 floors in ~580 ms, well under 5-second budget).",
-    "floor_10_structurally_distinguished": "PASS — boss arena ≥ BOSS_ARENA_MIN_SIZE × BOSS_ARENA_MIN_SIZE; verified in fixture-pack invariant test for boss-arena__floor10.",
-    "mapgen_consumes_only_mapgen_stream": "PASS — three layers: per-call __consumed delta guard inside generateFloor (frozen contract 11), eslint .sim/.ui ban under src/mapgen/**, mapgen-stream-isolation self-test runs in browser.",
-    "frozen_contracts_have_regression_tests": "PASS — see frozen_contracts_implemented above; each has at least one test.",
-    "bundle_size_75kb": "PASS — 11.5 KB gzipped (84% headroom). CI workflow gate set at 76800 bytes.",
-    "all_sandbox_gates_green": "PASS — npm ci && npm run lint && npm run test && npm run build all green."
-  },
-  "phase_2_b_remaining": "Phase 2.B (live GitHub Pages verification): observe the deploy workflow run green on the Phase 2.A commit, observe the live URL serves the updated diagnostic page with the ASCII preview rendering, observe the Phase 2.B Playwright job (chromium + firefox + webkit) executes the new preview-UI assertions in tests/e2e/diagnostic.spec.ts and reports green. No additional code expected; if a regression surfaces, that becomes a Phase 2.B blocker and is fixed before approval.",
-  "next_phase": "After Phase 2.B is observed green and approved, Phase 3 (Entity Model, Turn Loop, Combat) begins. Phase 3 will build src/sim/ on top of the deterministic mapgen output; the action descriptor schema (frozen contract 7) becomes load-bearing then."
+  "code_review_status": "Phase 2.B did not produce new application code; the artifact under verification is the Phase 2.A code already reviewed and approved (artifacts/code-review-phase-2-A.md, verdict APPROVE WITH NITS, no blockers, nits N1/N2/N4/N5 addressed in the Phase 2.A commit). The CI run on commit 394801f also exercised the linter, typechecker, unit tests (411 passing), build, bundle-size gate, and Playwright suite (chromium + firefox + webkit) — every gate passed. No code-reviewer reinvocation required.",
+  "qa_playwright_status": "Phase 2.B's qa-playwright equivalent is the CI Playwright job itself (the in-sandbox agent cannot download the Microsoft-hosted browser binaries; the cross-runtime CI job is the authoritative observation). It ran chromium + firefox + webkit on commit 394801f and reported green for the diagnostic suite (6 tests × 3 engines = 18 passing assertions, including the two new Phase 2.A floor-preview assertions).",
+  "follow_ups_carried_forward_from_phase_2A": [
+    "code-review #N3: tools/gen-fixtures.ts lacks a dedicated unit test (transitively covered by the fixture-pack byte-equality tests; add a focused test before mapgen registries gain another writer in Phase 6).",
+    "code-review #N6: door-placement coverage is sparse on standard floors — 5 of 10 floor-1 fixtures have doors:[]; locked by the fixture pack so any fix is a rulesetVersion bump. Worth revisiting if door logic is touched.",
+    "code-review #N7: the decodeBase64Url helper inside src/mapgen/serialize.ts could relocate to src/core/hash.ts for symmetry with the encoder. Pure organizational cleanup; round-trip correctness is verified."
+  ],
+  "phase_2_complete": true,
+  "next_phase": "Phase 3 — Entity Model, Turn Loop, Combat. Drift-detection sweep should fold in the three carried-forward Phase 2.A follow-ups (gen-fixtures unit test, door-placement coverage, decodeBase64Url relocation) as part of Phase 3's setup. Phase 3 builds src/sim/ on top of the deterministic mapgen output; the action descriptor schema (Phase 1 frozen contract 7) becomes load-bearing then. Phase 3 is a planning-gate phase per docs/PHASES.md and requires a decision memo + architecture-red-team review before any sim/ code is written."
 }
