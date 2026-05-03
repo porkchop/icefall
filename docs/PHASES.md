@@ -4,13 +4,20 @@ This document defines the phase plan. Each phase ends with a working artifact, a
 
 For each phase the doc lists: **Goal**, **Lead agent**, **Reviewers**, **Deliverables**, **Acceptance criteria**, **Risks**.
 
-**Planning gates** (require a `decision-memo.md` plus an `architecture-red-team` review before code begins): phases 1, 2, 3, 4, and 8.
+**Planning gates** (require a `decision-memo.md` plus an `architecture-red-team` review before code begins): phases 1.A, 2, 3, 4, and 8.
 
 **Public-from-day-one.** Every phase's merged deliverable is automatically deployed to GitHub Pages (set up in Phase 1). This means each phase ends with something a stranger can click and play, the deploy pipeline is battle-tested gradually, and Phase 8 only needs to add the content-addressed layer on top of an already-proven pipeline.
 
 ---
 
 ## Phase 1 — Deterministic Core + Public Deployment
+
+> **Phase 1 split.** Per `artifacts/decision-memo-phase-1.md` (red-team
+> blocking issue B3), Phase 1 is split into **Phase 1.A** (everything
+> producible inside the sandbox) and **Phase 1.B** (live GitHub Pages
+> verification, which requires an external push). Phase 2 cannot begin
+> until **both** are approved. The original Phase 1 acceptance criteria
+> are partitioned between 1.A and 1.B below.
 
 **Goal.** Build the substrate that everything else stands on: seeded PRNG, sync hashing, RNG streams, state-hash chain, run fingerprint. Plus a working public deploy pipeline so every subsequent phase ships live to GitHub Pages on merge.
 
@@ -44,20 +51,25 @@ For each phase the doc lists: **Goal**, **Lead agent**, **Reviewers**, **Deliver
 - Workflow status badge for the deploy job
 - One-paragraph project description, link to `docs/SPEC.md` for details
 
-**Acceptance criteria.**
-- Cross-runtime determinism test: identical input sequence yields identical hash chain in Chrome, Firefox, Safari, and Node.
-- 1,000-step random-walk test produces an identical sequence across browser and Node builds.
-- Fingerprint round-trips: same `(commit, ruleset, seed, mods)` always produces the same fingerprint string; sorting of mod IDs is stable.
-- 100% line coverage on `src/core/*`.
-- Custom lint rules in place and enforced: no `Math.random`, no `Date.now()` in `core/` or `sim/`, no floating-point arithmetic in `sim/`, no iteration over un-ordered collections in `sim/`.
+**Acceptance criteria — Phase 1.A (in-sandbox).**
+- Node-side determinism test: a 1,000-step random-walk produces an identical hardcoded golden digest on every Node run (asserted by `src/core/self-test.test.ts`).
+- Fingerprint round-trips: same `(commit, ruleset, seed, mods)` always produces the same fingerprint string; sorting of mod IDs is stable; placeholder ruleset emits a `DEV-` sentinel prefix that Phase 4 will refuse to load.
+- 100% line coverage on `src/core/*` (Vitest v8 coverage threshold enforced; build fails below threshold).
+- Custom lint rules in place and enforced: no `Math.random`, no `Date.now()`/`performance.now()`/`new Date()` in `core/` or `sim/`, no floating-point arithmetic in `sim/` (per the rule contract in the decision memo), no iteration over un-ordered collections in `sim/`. Each rule has fixture tests.
+- `.github/workflows/deploy.yml` exists with pinned action versions, the required permissions block (`pages: write`, `id-token: write`, `contents: read`), the concurrency group, and runs `npm ci && npm run lint && npm run test && npm run build` before deploying.
+- `playwright.config.ts` and `tests/e2e/diagnostic.spec.ts` exist and are wired into the CI workflow's `npm run test:e2e` job (executed once browsers are reachable in CI, not in the sandbox).
+- README contains the workflow status badge, a "▶ Play live" link, a one-paragraph project description, and a link to `docs/SPEC.md`.
+
+**Acceptance criteria — Phase 1.B (external verification, post-push).**
 - Push to `main` triggers the deploy workflow; the workflow completes green within five minutes.
 - The GitHub Pages URL serves the current build of `main` and shows the diagnostic page with a green "self-test passed" indicator.
 - README's "Play live" link resolves to a working page.
+- The CI Playwright job runs `tests/e2e/diagnostic.spec.ts` against `chromium`, `firefox`, `webkit` and reports green on all three; it asserts the same `RANDOM_WALK_DIGEST` constant the Node suite asserts, proving cross-runtime determinism end-to-end.
 
 **Risks.**
-- Floating-point drift in hot paths — mitigated by the lint rule banning floats in `sim/` plus a CI test that diffs final state hashes across browsers.
-- SubtleCrypto is async, which complicates hot-path use — mitigated by including a small sync SHA-256 implementation for the simulation loop and reserving SubtleCrypto for fingerprint computation.
-- Vite asset pathing under a GitHub Pages subpath is a common foot-gun — pinned by the `base` config and verified by the smoke test on the deployed URL.
+- Floating-point drift in hot paths — mitigated by the lint rule banning floats in `sim/` plus a CI test that asserts a hardcoded golden state-hash digest across all four runtimes.
+- SubtleCrypto is async, which complicates hot-path use — mitigated by using a sync SHA-256 implementation everywhere (`@noble/hashes/sha256`); SubtleCrypto deferred to a possible later optimization path with no contract impact.
+- Vite asset pathing under a GitHub Pages subpath is a common foot-gun — pinned by the `base` config and verified by a Playwright smoke that mirrors the subpath under `vite preview` in 1.A; the live verification in 1.B is the final check.
 
 ---
 

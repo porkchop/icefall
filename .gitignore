@@ -3,5 +3,12 @@
 .scaffold/manifest.json.lock
 *.scaffold-tmp
 
-# Add project-language gitignores below as the project takes shape
-# (e.g. node_modules/, .venv/, build/, dist/)
+# Project-language gitignores
+node_modules/
+dist/
+coverage/
+playwright-report/
+test-results/
+.vite/
+*.log
+.DS_Store

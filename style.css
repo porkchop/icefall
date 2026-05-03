@@ -1,0 +1,135 @@
+:root {
+  --bg: #0c0e14;
+  --fg: #d6deeb;
+  --muted: #7080a0;
+  --green: #6fe3a8;
+  --red: #ff6b6b;
+  --accent: #c792ea;
+  font-family: ui-monospace, "Cascadia Code", Menlo, Monaco, "DejaVu Sans Mono",
+    monospace;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--fg);
+  min-height: 100%;
+}
+
+#app {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 32px 24px 80px;
+}
+
+.header .title {
+  margin: 0;
+  font-size: 28px;
+  letter-spacing: 0.02em;
+  color: var(--accent);
+}
+
+.header .subtitle {
+  margin: 4px 0 24px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.banner {
+  padding: 12px 16px;
+  border-radius: 4px;
+  font-weight: 600;
+  margin-bottom: 16px;
+  border: 1px solid transparent;
+}
+
+.banner-ok {
+  background: rgba(111, 227, 168, 0.08);
+  color: var(--green);
+  border-color: rgba(111, 227, 168, 0.4);
+}
+
+.banner-fail {
+  background: rgba(255, 107, 107, 0.1);
+  color: var(--red);
+  border-color: rgba(255, 107, 107, 0.5);
+}
+
+.checks {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 16px;
+}
+
+.check {
+  padding: 6px 0;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  border-bottom: 1px dashed rgba(160, 175, 200, 0.15);
+}
+
+.check-marker {
+  font-weight: 700;
+  width: 1em;
+  text-align: center;
+}
+
+.check-ok .check-marker {
+  color: var(--green);
+}
+
+.check-fail .check-marker {
+  color: var(--red);
+}
+
+.failure-detail {
+  background: rgba(255, 107, 107, 0.08);
+  border: 1px solid rgba(255, 107, 107, 0.4);
+  color: var(--red);
+  padding: 12px;
+  border-radius: 4px;
+  white-space: pre-wrap;
+  font-size: 12px;
+  margin-bottom: 16px;
+}
+
+.build-meta {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(160, 175, 200, 0.15);
+}
+
+.build-meta h2 {
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  margin: 0 0 12px;
+}
+
+.build-meta dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 16px;
+  margin: 0;
+}
+
+.build-meta dt {
+  color: var(--muted);
+}
+
+.build-meta dd {
+  margin: 0;
+  word-break: break-all;
+}
+
+.warn {
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 16px;
+  border-left: 2px solid var(--accent);
+  padding-left: 10px;
+}

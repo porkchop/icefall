@@ -1,0 +1,71 @@
+{
+  "phase": "phase-1A",
+  "approved": true,
+  "summary": "Phase 1.A (deterministic core + project scaffolding + deploy pipeline files, all in-sandbox deliverables) complete. Phase 1 was split into 1.A (this) and 1.B (live GitHub Pages verification + Playwright cross-runtime against real browsers, both requiring external infrastructure) per architecture-red-team blocker B3. All Phase 1.A acceptance criteria met: 151 tests pass, 100% line coverage on src/core/*, custom determinism lint rules and import-boundary lint rules in place with fixture tests, deploy workflow file written with pinned action versions and required Pages permissions, Playwright config and spec wired in, README has badge and Play live link.",
+  "decision_memo": "artifacts/decision-memo-phase-1.md",
+  "suggested_commit_message": "phase-1A: deterministic core engine + scaffolding + deploy pipeline files",
+  "verification_sprint": null,
+  "verification": {
+    "tests": {
+      "unit": "151 passed (vitest run)",
+      "coverage": "100% lines / 100% statements / 100% functions on src/core/*; branch 95.97% (sub-100 branches are dead-fallback code in self-test renderer + build-info typeof-undefined fallbacks)",
+      "lint": "eslint . — 0 errors",
+      "typecheck": "tsc -b --noEmit — 0 errors (TS strict + exactOptionalPropertyTypes + noUncheckedIndexedAccess)",
+      "build": "vite build — 6.37 KB gzipped (well under 50 KB Phase 1 budget)",
+      "smoke": "python3 -m http.server against dist/ — index.html serves correctly under /icefall/ subpath; bundle contains all expected runtime markers (RANDOM_WALK_DIGEST, self-test-banner, __SELF_TEST_RESULT__, __RANDOM_WALK_DIGEST__, DEV-)"
+    },
+    "blocked_in_sandbox": [
+      "Playwright browser binaries cannot be downloaded (sandbox lacks internet egress to Microsoft CDN). The Playwright config and spec are written and wired into the CI workflow; cross-runtime browser determinism is therefore part of Phase 1.B, not 1.A.",
+      "GitHub Pages deploy cannot run from this sandbox (cannot push to GitHub). The workflow file is written and pinned; live verification is Phase 1.B."
+    ]
+  },
+  "pending_external_verification": [
+    "github-pages-deploy: workflow runs green within 5 minutes of merge to master",
+    "live-url-self-test: deployed page reports window.__SELF_TEST_RESULT__ === 'green'",
+    "playwright-cross-runtime: chromium + firefox + webkit all assert RANDOM_WALK_DIGEST and __SELF_TEST_RESULT__ === 'green' in CI"
+  ],
+  "follow_ups": [
+    "code-review #2: bump no-float-arithmetic invalid-fixture count beyond the addendum minimum (currently 20, target ~25) before Phase 2 sim code lands.",
+    "code-review #7: add timeout-minutes: 15 to the build job in .github/workflows/deploy.yml.",
+    "code-review #8: add a unit test that asserts encodeAction emits optional fields in strictly increasing tag order across all 2^k field-presence combinations (defensive against a future field added in source-order rather than tag-order)."
+  ],
+  "phase_split_rationale": "Phase 1 acceptance criteria included items that require external infrastructure (real GitHub Pages deploy; downloading Playwright browser binaries via Microsoft CDN). Both are unreachable from this sandbox. Per docs/QUALITY_GATES.md 'Discovered work and phase expansion', the phase plan was updated to split Phase 1 into 1.A (in-sandbox) and 1.B (external verification). Phase 2 cannot start until 1.B is also approved.",
+  "files_added_or_changed": {
+    "phase_plan": ["docs/PHASES.md (split Phase 1 → 1.A + 1.B)"],
+    "architecture_doc": ["docs/ARCHITECTURE.md (populated with frozen-contract byte layouts)"],
+    "decision_memo": ["artifacts/decision-memo-phase-1.md (with addendum addressing red-team B1–B6, N4, N5, N7)"],
+    "core": [
+      "src/core/hash.ts",
+      "src/core/prng.ts",
+      "src/core/streams.ts",
+      "src/core/encode.ts",
+      "src/core/state-chain.ts",
+      "src/core/fingerprint.ts",
+      "src/core/self-test.ts"
+    ],
+    "core_tests": [
+      "src/core/hash.test.ts (22 tests)",
+      "src/core/prng.test.ts (12 tests)",
+      "src/core/streams.test.ts (29 tests)",
+      "src/core/encode.test.ts (20 tests)",
+      "src/core/state-chain.test.ts (11 tests)",
+      "src/core/fingerprint.test.ts (18 tests)",
+      "src/core/self-test.test.ts (4 tests)"
+    ],
+    "scaffolding": [
+      "package.json",
+      "tsconfig.json",
+      "vite.config.ts",
+      "vitest.config.ts",
+      "playwright.config.ts",
+      "eslint.config.js",
+      "eslint-rules/no-float-arithmetic.cjs",
+      "eslint-rules/no-float-arithmetic.test.ts (35 tests)",
+      ".gitignore"
+    ],
+    "diagnostic_ui": ["src/main.ts", "src/build-info.ts", "index.html", "style.css"],
+    "ci": [".github/workflows/deploy.yml"],
+    "e2e": ["tests/e2e/diagnostic.spec.ts"],
+    "readme": ["README.md"]
+  }
+}
