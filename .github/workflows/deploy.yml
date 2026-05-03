@@ -17,6 +17,7 @@ jobs:
   build:
     name: build & test
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -39,6 +40,10 @@ jobs:
         run: npm run build
       - name: configure pages
         uses: actions/configure-pages@v5
+        with:
+          # Self-bootstrap Pages on first run so the host doesn't need to
+          # toggle "Source: GitHub Actions" in repo Settings → Pages manually.
+          enablement: true
       - name: upload pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
@@ -48,6 +53,7 @@ jobs:
     name: deploy to GitHub Pages
     needs: build
     runs-on: ubuntu-24.04
+    timeout-minutes: 5
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

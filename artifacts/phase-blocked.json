@@ -1,0 +1,43 @@
+{
+  "phase": "phase-1B",
+  "blocked": true,
+  "summary": "Phase 1.B (external verification of GitHub Pages deploy + Playwright cross-runtime browser tests in CI) cannot be exercised from this sandbox. Phase 1.B was deliberately scoped to verify-only work that requires external infrastructure (the GitHub Actions runner with internet egress, the GitHub Pages deploy target, and Microsoft's Playwright browser CDN). The minimal sandbox-side fix to maximize Phase 1.B's chance of clearing on the host's next workflow run has been applied: deploy.yml now passes `enablement: true` to actions/configure-pages so the workflow self-bootstraps Pages on first run, and the build/deploy jobs now have explicit timeout-minutes guards.",
+  "blocker_kind": "external-execution-required",
+  "external_state_observed": {
+    "github_actions_workflow_runs": "0 (the workflow file has not yet executed since being committed in ca36c18)",
+    "github_pages_site": "Not configured (api.github.com/repos/porkchop/icefall/pages → 404)",
+    "live_url_status": "https://porkchop.github.io/icefall/ → 404 'Site not found'",
+    "playwright_browser_cdn": "Unreachable from this sandbox (curl https://cdn.playwright.dev/ → connection refused / timeout)"
+  },
+  "what_the_host_must_do": [
+    "Commit and push this branch (which contains the deploy.yml self-bootstrap fix) to origin/master.",
+    "Once the workflow runs on GitHub: confirm the `build & test` job is green, including the `cross-runtime e2e` step that downloads chromium/firefox/webkit and runs tests/e2e/diagnostic.spec.ts in all three.",
+    "Confirm the `deploy to GitHub Pages` job is green and reports a page_url.",
+    "Hit https://porkchop.github.io/icefall/ (or the URL reported by the deploy job) and confirm the diagnostic page renders with the green 'self-test passed' banner.",
+    "If the README's `[![deploy]](...)` badge is red, inspect the failing run and either fix-forward (Phase 1.5) or open an issue.",
+    "When all four Phase 1.B acceptance criteria are met (workflow green within 5min; live URL serves diagnostic; Play live link resolves; CI Playwright green across three engines), write artifacts/phase-approval.json with phase = 'phase-1B' and resume the loop."
+  ],
+  "what_might_go_wrong_on_first_run": [
+    "Pages must be allowed to be enabled by Actions. If the org/account has 'Pages: disabled' enforced, `enablement: true` will fail with a 403 — host needs to flip the org setting or enable Pages manually in repo Settings → Pages → Source: GitHub Actions.",
+    "Playwright `--with-deps` install requires `sudo apt-get install` to succeed on the runner; ubuntu-24.04 supports this.",
+    "The `npm run test:e2e` step starts vite preview via the playwright.config.ts webServer block; if port 4173 is in use on the runner the suite will pick another port automatically.",
+    "WebKit on Linux occasionally has flakes around custom-paint primitives, but the diagnostic page is plain DOM/CSS so this is unlikely to bite."
+  ],
+  "sandbox_side_changes_in_this_session": {
+    "deploy_workflow": [
+      "Added `enablement: true` to `actions/configure-pages@v5` so first-run can create the Pages site without manual host setup (.github/workflows/deploy.yml).",
+      "Added `timeout-minutes: 15` to the build job and `timeout-minutes: 5` to the deploy job (addresses code-review follow-up #7 from the Phase 1.A approval)."
+    ],
+    "verification": {
+      "lint": "eslint . — 0 errors",
+      "typecheck": "tsc -b --noEmit — 0 errors",
+      "tests": "151 passed (vitest run)",
+      "build": "vite build — 6.53 KB gzipped"
+    }
+  },
+  "remaining_phase_1A_followups_unchanged": [
+    "code-review #2: bump no-float-arithmetic invalid-fixture count beyond addendum minimum (currently 20, target ~25) before Phase 2 sim code lands.",
+    "code-review #8: assert encodeAction emits optional fields in strictly increasing tag order across all 2^k field-presence combinations."
+  ],
+  "suggested_commit_message": "phase-1B: self-bootstrap Pages + workflow timeouts; blocked on external verification"
+}
