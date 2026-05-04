@@ -6,6 +6,39 @@ const RANDOM_WALK_DIGEST =
 const SIM_DIGEST =
   "321c09e5f87e879aebdf58ccaaada5e85f8a114bf01f4e012039eced5dba079e";
 
+const ATLAS_DIGEST =
+  "d1b4a8b73d3e2c1b7cd70c26fe15a08faae5d91351d9e2e9a542ce71727b8d1a";
+
+// Phase 4 preset-seed expectedHash values (memo addendum N12). Pinned
+// in `src/atlas/preset-seeds.ts` and re-asserted here for the live
+// browser environment.
+const PRESET_HASHES: { id: string; seed: string; expectedHash: string }[] = [
+  {
+    id: "placeholder",
+    seed: "icefall-phase4-placeholder-atlas-seed",
+    expectedHash:
+      "d1b4a8b73d3e2c1b7cd70c26fe15a08faae5d91351d9e2e9a542ce71727b8d1a",
+  },
+  {
+    id: "variant-A",
+    seed: "icefall-atlas-variant-A",
+    expectedHash:
+      "de525492c8e57d9a0d3a0cf0705473ea71c980fdb0531e23611b8b943e3fbb1b",
+  },
+  {
+    id: "variant-B",
+    seed: "icefall-atlas-variant-B",
+    expectedHash:
+      "e06d80723b3a2fe417a53b908aa85a3a087e6c6ac41038bcc2fd809ddbe7dd3a",
+  },
+  {
+    id: "variant-C",
+    seed: "icefall-atlas-variant-C",
+    expectedHash:
+      "2fd44a69293f6ad7acdff33cb8e30cc34fef4efc73ac6c79bdb3f4c0971d9233",
+  },
+];
+
 test("diagnostic page reports self-test green", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator("#self-test-banner")).toHaveAttribute(
@@ -27,7 +60,7 @@ test("cross-runtime random-walk digest matches the golden constant", async ({
   expect(details!.failures).toEqual([]);
 });
 
-test("diagnostic page renders build info including DEV- fingerprint", async ({
+test("diagnostic page renders build info with derived (non-placeholder) ruleset", async ({
   page,
 }) => {
   await page.goto("/");
@@ -35,12 +68,16 @@ test("diagnostic page renders build info including DEV- fingerprint", async ({
   await expect(banner).toBeVisible();
   await expect(page.getByText("commitHash")).toBeVisible();
   await expect(page.getByText("rulesetVersion")).toBeVisible();
-  // Phase 1 placeholder ruleset → fingerprint must be DEV- prefixed.
+  // Phase 4.A.2 atomic flip (addendum B1): the placeholder is retired
+  // and `rulesetVersion` is the derived `sha256(rulesText ‖
+  // atlasBinaryHash)` value. Sample fingerprint is therefore NOT
+  // DEV-prefixed.
   const fingerprintText = await page
     .locator(".build-meta dd")
     .nth(2)
     .innerText();
-  expect(fingerprintText.startsWith("DEV-")).toBe(true);
+  expect(fingerprintText.startsWith("DEV-")).toBe(false);
+  expect(fingerprintText.length).toBeGreaterThan(0);
 });
 
 test("computed walk digest matches the Node-side constant", async ({
@@ -121,3 +158,67 @@ test("scripted-playthrough button is idempotent — re-clicking produces same ha
   const outcome = await page.evaluate(() => window.__SIM_OUTCOME__);
   expect(outcome).toBe("running");
 });
+
+// Phase 4.A.2 atlas preview UI tests (memo decision 9 + addendum N12).
+
+test("atlas preview UI is visible and ready", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.locator("#atlas-preview")).toBeVisible();
+  await page.waitForFunction(
+    () => window.__ATLAS_PREVIEW__ === "ready",
+    null,
+    { timeout: 10_000 },
+  );
+  await expect(page.locator("#atlas-seed-input")).toBeVisible();
+  await expect(page.locator("#atlas-regenerate-button")).toBeVisible();
+  await expect(page.locator("#atlas-preview-canvas")).toBeVisible();
+});
+
+test("atlas preview build hash equals live hash for the default seed (cross-runtime determinism)", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.waitForFunction(
+    () => window.__ATLAS_PREVIEW__ === "ready",
+    null,
+    { timeout: 10_000 },
+  );
+  const buildHash = await page.evaluate(
+    () => window.__ATLAS_PREVIEW_BUILD_HASH__,
+  );
+  const liveHash = await page.evaluate(
+    () => window.__ATLAS_PREVIEW_LIVE_HASH__,
+  );
+  expect(buildHash).toBe(ATLAS_DIGEST);
+  expect(liveHash).toBe(ATLAS_DIGEST);
+  expect(buildHash).toBe(liveHash);
+});
+
+for (const preset of PRESET_HASHES) {
+  test(`atlas preset '${preset.id}' regenerates to its pinned expectedHash`, async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await page.waitForFunction(
+      () => window.__ATLAS_PREVIEW__ === "ready",
+      null,
+      { timeout: 10_000 },
+    );
+    // Click the preset button matching this preset.id.
+    await page
+      .locator(`.atlas-preset-button[data-preset-id="${preset.id}"]`)
+      .click();
+    // Wait for the live hash to update to the expected value.
+    await page.waitForFunction(
+      (expected) => window.__ATLAS_PREVIEW_LIVE_HASH__ === expected,
+      preset.expectedHash,
+      { timeout: 10_000 },
+    );
+    const seed = await page.evaluate(() => window.__ATLAS_PREVIEW_SEED__);
+    expect(seed).toBe(preset.seed);
+    const liveHash = await page.evaluate(
+      () => window.__ATLAS_PREVIEW_LIVE_HASH__,
+    );
+    expect(liveHash).toBe(preset.expectedHash);
+  });
+}

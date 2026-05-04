@@ -74,6 +74,21 @@ module.exports = {
         if (typeof node.value !== "number") return;
         const raw = node.raw;
         if (raw === undefined) return;
+        // Hex/binary/octal literals (0x..., 0b..., 0o...) are integer
+        // by JS spec — skip the decimal/exponent checks. Hex digits
+        // include `e` / `E` (e.g. `0x9e3779b1`), which would otherwise
+        // false-positive the exponent test.
+        const lower = raw.toLowerCase();
+        if (
+          lower.startsWith("0x") ||
+          lower.startsWith("0b") ||
+          lower.startsWith("0o") ||
+          lower.startsWith("-0x") ||
+          lower.startsWith("-0b") ||
+          lower.startsWith("-0o")
+        ) {
+          return;
+        }
         if (raw.includes(".")) {
           context.report({
             node,

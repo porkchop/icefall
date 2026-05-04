@@ -19,6 +19,15 @@ import {
 } from "../sim/self-test-log";
 import { ACTION_TYPE_WAIT } from "../sim/params";
 import { seedToBytes } from "./seed";
+import { generateAtlas } from "../atlas/generate";
+import {
+  parseAtlasJson,
+  serializeAtlasManifest,
+} from "../atlas/manifest";
+import { atlasSeedToBytes } from "../atlas/seed";
+import { ATLAS_SEED_DEFAULT } from "../atlas/params";
+import { encodeIndexedPng } from "../atlas/png";
+import { CYBERPUNK_NEON_V1 } from "../atlas/palette";
 
 /**
  * Hardcoded golden digest of a 1,000-step random walk over the state
@@ -62,6 +71,31 @@ export const MAPGEN_DIGEST =
  */
 export const SIM_DIGEST =
   "321c09e5f87e879aebdf58ccaaada5e85f8a114bf01f4e012039eced5dba079e";
+
+/**
+ * Hardcoded golden digest of `assets/atlas.png` generated under
+ * `ATLAS_SEED_DEFAULT`. Pinning point for cross-runtime atlas
+ * determinism: any silent drift in the recipe primitives, the PNG
+ * encoder (filter selection, fflate level, chunk order), or the
+ * palette layout surfaces here in any runtime (Node, Chromium,
+ * Firefox, WebKit).
+ *
+ * Frozen-contract item 12 from Phase 4 decision memo. Changing this
+ * constant is a `rulesetVersion` bump and requires
+ * `architecture-red-team` review.
+ */
+export const ATLAS_DIGEST =
+  "d1b4a8b73d3e2c1b7cd70c26fe15a08faae5d91351d9e2e9a542ce71727b8d1a";
+
+/**
+ * Hardcoded SHA-256 of the encoded PNG for a 16×16 single-color
+ * (palette index 5) tile. Pinning point for the encoder pipeline at
+ * its smallest meaningful unit — addendum B4. Computed during Phase
+ * 4.A.2 and pasted literally; bumping requires architecture-red-team
+ * review (encoder change → IDAT bytes change → atlasBinaryHash bumps).
+ */
+export const ATLAS_ENCODER_SINGLE_COLOR_TILE_HASH =
+  "4ea07c563df8743c7b8b4cdd9f11a4a24fa5ee60a0dbc6829f8d81a7d34b8a21";
 
 const DIRECTIONS = ["wait", "move", "use", "attack"] as const;
 
@@ -323,6 +357,77 @@ const checks: Check[] = [
         before.length === after.length &&
           before.every((k, i) => k === after[i]),
         `expected per-tick __consumed delta empty, got before=${JSON.stringify(before)} after=${JSON.stringify(after)}`,
+      );
+    },
+  },
+  {
+    name: "atlas-cross-runtime-digest",
+    run() {
+      // Re-run `generateAtlas(ATLAS_SEED_DEFAULT)` from scratch and
+      // assert the byte-pinned ATLAS_DIGEST. Cross-runtime — any silent
+      // drift in primitives, encoder, palette, or layout surfaces here
+      // in any runtime (Node, Chromium, Firefox, WebKit).
+      const { png } = generateAtlas(ATLAS_SEED_DEFAULT);
+      const got = sha256Hex(png);
+      assert(
+        got === ATLAS_DIGEST,
+        `atlas-cross-runtime-digest mismatch: actual=${got}`,
+      );
+    },
+  },
+  {
+    name: "atlas-stream-isolation",
+    run() {
+      // Per addendum B8 — one streams.atlas() call advances
+      // __consumed.size by exactly 1 and records exactly the key
+      // "atlas:" + recipeId.
+      const rootSeed = atlasSeedToBytes(ATLAS_SEED_DEFAULT);
+      const streams = streamsForRun(rootSeed);
+      const sizeBefore = streams.__consumed.size;
+      assert(
+        sizeBefore === 0,
+        `atlas-stream-isolation: fresh streams should have empty __consumed, got size=${sizeBefore}`,
+      );
+      streams.atlas("atlas-recipe.cyberpunk.tile.floor");
+      const sizeAfter = streams.__consumed.size;
+      assert(
+        sizeAfter === 1,
+        `atlas-stream-isolation: a single streams.atlas() call should advance __consumed.size by exactly 1, got delta ${sizeAfter - sizeBefore}`,
+      );
+      assert(
+        streams.__consumed.has("atlas:atlas-recipe.cyberpunk.tile.floor"),
+        "atlas-stream-isolation: __consumed should contain 'atlas:atlas-recipe.cyberpunk.tile.floor'",
+      );
+    },
+  },
+  {
+    name: "atlas-manifest-parse",
+    run() {
+      // Round-trip the canonical atlas manifest: serialize → parse →
+      // re-serialize. Output must be byte-identical (mirrors the
+      // parseFloor self-test pattern from Phase 2).
+      const { manifest } = generateAtlas(ATLAS_SEED_DEFAULT);
+      const text = serializeAtlasManifest(manifest);
+      const parsed = parseAtlasJson(JSON.parse(text));
+      const reSerialized = serializeAtlasManifest(parsed);
+      assert(
+        text === reSerialized,
+        `atlas-manifest-parse: round-trip mismatch (lengths ${text.length} vs ${reSerialized.length})`,
+      );
+    },
+  },
+  {
+    name: "atlas-encoder-cross-runtime",
+    run() {
+      // Per addendum B4 — encode a hardcoded 16×16 single-color tile
+      // (palette index 5) and assert SHA-256 equals the pinned golden.
+      const pixels = new Uint8Array(16 * 16);
+      pixels.fill(5);
+      const png = encodeIndexedPng(16, 16, pixels, CYBERPUNK_NEON_V1);
+      const got = sha256Hex(png);
+      assert(
+        got === ATLAS_ENCODER_SINGLE_COLOR_TILE_HASH,
+        `atlas-encoder-cross-runtime: actual=${got}`,
       );
     },
   },

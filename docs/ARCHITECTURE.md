@@ -439,11 +439,12 @@ steps)` requires `steps >= 2` and throws on `0` / `1` with the
 message `paletteGradient: steps must be >= 2 (got <n>); use
 paletteIndex directly for a single-color result` (addendum N4).
 `valueNoise2D(prng, x, y)` consumes **exactly one** `prng.next()`
-call per invocation (addendum N3). The remaining primitives —
-`paletteIndex`, `solidFill`, `pixel`, `outlineRect`, `fillRect`,
-`scanline`, `dither2x2`, `radialGradient` — are signature-pinned in
-the memo's decision 1 table; bumping any signature is a
-`rulesetVersion` bump.
+call per invocation (addendum N3). The full set, matching the memo's
+decision 1 table and `src/atlas/primitives.ts`: `paletteIndex`,
+`paletteSwap`, `paletteGradient`, `bayerThreshold`, `valueNoise2D`,
+`rectMask`, `circleMask`, `lineMask`, `columnShift`,
+`scanlineResidue` (plus the public `hash2D` mixer used by
+`valueNoise2D`). Bumping any signature is a `rulesetVersion` bump.
 
 **Recipe signature.**
 
@@ -459,15 +460,19 @@ Recipes may not import from `sim/`, `mapgen/`, `render/`, `input/`, or
 `main/` (lint-enforced; see below). Coordinate stability holds across
 runs: same `(recipeId, atlasSeed)` → same byte output.
 
-**Recipe ID format.** Regex anchored to `cyberpunk` for v1:
+**Recipe ID format.** Regex anchored to `cyberpunk` for v1, with
+seven `<category>` values (`tile`, `monster`, `item`, `player`,
+`npc`, `ui`, `boss`):
 
 ```
-^atlas-recipe\.(cyberpunk)\.(tile|monster|item|player|npc)\.[a-z][a-z0-9-]*$
+^atlas-recipe\.(cyberpunk)\.(tile|monster|item|player|npc|ui|boss)\.[a-z][a-z0-9-]*$
 ```
 
-Adding a new `<theme>` value to the alternation is a `rulesetVersion`
-bump (addendum N11). In practice every theme addition is already a
-bump because the recipes themselves are.
+Pinned in `src/registries/atlas-recipes.ts:RECIPE_ID_REGEX`. Adding
+a `<theme>` or `<category>` value is a `rulesetVersion` bump
+(addendum N11; the addition lands as an additive registry change).
+In practice every category/theme addition is already a bump because
+the recipes themselves are.
 
 **`streams.atlas(recipeId)` accessor.** A new `RunStreams` accessor
 (Phase 4.A.2 addition). Per-call invariant: a single
@@ -585,14 +590,22 @@ The pre-image is the alphabetically-sorted concatenation of
 
 `atlasBinaryHash` is computed by the Vite plugin
 (`scripts/vite-plugin-atlas-binary-hash.mjs`, addendum B5):
-`configResolved` reads `assets/atlas.png` and computes
-`sha256(bytes)`; `config` exposes `__ATLAS_BINARY_HASH__` and
-`__ATLAS_MISSING__` to the `define` block (each wrapped in
-`JSON.stringify` per addendum N17); `handleHotUpdate` triggers a
-`full-reload` on regen in dev mode. The empty-atlas fallback (4.A.1)
-is `__ATLAS_BINARY_HASH__ =
+`config` runs `recompute()` eagerly (vitest's `define` substitution
+requires the values be resolved before `configResolved` per the
+discovered timing constraint surfaced during 4.A.2; `configResolved`
+re-runs as defense-in-depth) — it reads `assets/atlas.png` and
+computes `sha256(bytes)`. `config` exposes `__ATLAS_BINARY_HASH__`,
+`__ATLAS_MISSING__`, and `__RULESET_VERSION__` to the `define` block
+(each wrapped in `JSON.stringify` per addendum N17);
+`handleHotUpdate` triggers a `full-reload` on regen in dev mode;
+`closeBundle` copies `assets/atlas.png` and `assets/atlas.json`
+into `dist/assets/` so the production preview/deploy serves them at
+`/icefall/assets/atlas.{png,json}` (the URL the preview UI and the
+Phase 5+ atlas-loader fetch). The empty-atlas fallback (4.A.1) is
+`__ATLAS_BINARY_HASH__ =
 "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"`
-(SHA-256 of the empty byte string) and `__ATLAS_MISSING__ = true`.
+(SHA-256 of the empty byte string), `__ATLAS_MISSING__ = true`, and
+`__RULESET_VERSION__ = PLACEHOLDER_RULESET_VERSION`.
 
 The `deriveRulesetVersion(rulesText, atlasBinaryHash)` helper is
 **defined but not yet called** at the `define`-block site in Phase
@@ -604,7 +617,7 @@ exactly one of two states holds: the placeholder (pre-4.A.2) or a
 allowed.
 
 **Atlas-loader `DEV-` refusal and hash check.** The runtime
-atlas-loader (Phase 4.A.2, `src/render/atlas-loader.ts`) refuses to
+atlas-loader (Phase 4.A.2, `src/atlas/loader.ts`) refuses to
 load any build whose `rulesetVersion === PLACEHOLDER_RULESET_VERSION`
 with the exact message:
 

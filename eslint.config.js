@@ -302,6 +302,7 @@ export default tseslint.config(
       "no-restricted-syntax": [
         "error",
         ...FORBIDDEN_TIME,
+        ...SIM_UNORDERED,
         {
           selector:
             "MemberExpression[object.name='crypto'][property.name='subtle']",
@@ -309,6 +310,19 @@ export default tseslint.config(
             "src/atlas/** must not use `crypto.subtle` — async API; pipeline is sync via `@noble/hashes/sha256` (addendum B4).",
         },
       ],
+    },
+  },
+  {
+    // Phase 4.A.2 — extend the determinism plugin to `src/atlas/**`.
+    // Memo decision 11 pins `no-float-arithmetic` for the atlas layer
+    // (every primitive is integer-only; the encoder is byte-deterministic
+    // by construction). The float ban applies to the production code
+    // only; tests are exempted by the test-scope override below.
+    files: ["src/atlas/**/*.ts"],
+    ignores: ["src/atlas/**/*.test.ts"],
+    plugins: { determinism: determinismPlugin },
+    rules: {
+      "determinism/no-float-arithmetic": "error",
     },
   },
   {

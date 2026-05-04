@@ -1,13 +1,17 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import {
   EMPTY_SHA256,
+  PLACEHOLDER_RULESET_VERSION,
+  RULES_FILES_PATHS,
   atlasBinaryHashPlugin,
   computeAtlasBinaryHash,
+  computeDefinePayload,
 } from "../../scripts/vite-plugin-atlas-binary-hash.mjs";
 import { sha256Hex } from "../../src/core/hash";
+import { RULES_FILES } from "../../src/build-info";
 
 /**
  * Phase 4.A.1 unit tests for the atlas-binary-hash Vite plugin
@@ -76,6 +80,16 @@ describe("atlasBinaryHashPlugin — 4.A.1 fallback path (no atlas)", () => {
     expect(cfg.define.__ATLAS_MISSING__).toBe("true");
   });
 
+  it("falls back to PLACEHOLDER_RULESET_VERSION when the atlas is missing (addendum B1: no transient sentinel)", () => {
+    const root = freshRoot();
+    const plugin = atlasBinaryHashPlugin({ root });
+    plugin.configResolved();
+    const cfg = plugin.config();
+    expect(cfg.define.__RULESET_VERSION__).toBe(
+      `"${PLACEHOLDER_RULESET_VERSION}"`,
+    );
+  });
+
   it("plugin name matches the pinned identifier", () => {
     const plugin = atlasBinaryHashPlugin({ root: freshRoot() });
     expect(plugin.name).toBe("icefall-atlas-binary-hash");
@@ -135,5 +149,47 @@ describe("atlasBinaryHashPlugin — 4.A.2 real-atlas path", () => {
     expect(plugin.config().define.__ATLAS_BINARY_HASH__).toBe(
       `"${sha256Hex(b)}"`,
     );
+  });
+});
+
+describe("atlasBinaryHashPlugin — atomic flip (addendum B1)", () => {
+  it("RULES_FILES_PATHS in the plugin matches RULES_FILES in build-info (no drift)", () => {
+    expect(RULES_FILES_PATHS).toEqual(RULES_FILES.map((r) => r.path));
+  });
+
+  it("computeDefinePayload returns derived rulesetVersion when the atlas exists", () => {
+    // Use the actual repo root so RULES_FILES paths resolve.
+    const repoRoot = resolve(import.meta.dirname, "..", "..");
+    const payload = computeDefinePayload(repoRoot);
+    expect(payload.missing).toBe(false);
+    // Real ruleset is a 64-char lowercase hex string (NOT the placeholder).
+    expect(payload.rulesetVersion).toMatch(/^[0-9a-f]{64}$/);
+    expect(payload.rulesetVersion).not.toBe(PLACEHOLDER_RULESET_VERSION);
+  });
+
+  it("define-block injection has no transient sentinel — exactly placeholder OR 64-hex", () => {
+    const repoRoot = resolve(import.meta.dirname, "..", "..");
+    const plugin = atlasBinaryHashPlugin({ root: repoRoot });
+    plugin.configResolved();
+    const cfg = plugin.config();
+    const value = cfg.define.__RULESET_VERSION__;
+    // The injection is JSON.stringify(...)'d, so the value is "..." with quotes.
+    const placeholderInjection = JSON.stringify(PLACEHOLDER_RULESET_VERSION);
+    const isPlaceholder = value === placeholderInjection;
+    const isHex64 = /^"[0-9a-f]{64}"$/.test(value);
+    expect(isPlaceholder || isHex64).toBe(true);
+  });
+});
+
+describe("atlas-recipes presence — RULES_FILES 4.A.2 entries land in 4.A.2", () => {
+  it("every RULES_FILES path exists on disk in 4.A.2", () => {
+    const repoRoot = resolve(import.meta.dirname, "..", "..");
+    for (const entry of RULES_FILES) {
+      const full = resolve(repoRoot, entry.path);
+      // After 4.A.2 lands `src/atlas/palette.ts`, `src/atlas/params.ts`,
+      // and `src/registries/atlas-recipes.ts`, every entry should exist.
+      const bytes = readFileSync(full);
+      expect(bytes.length).toBeGreaterThan(0);
+    }
   });
 });

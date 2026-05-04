@@ -1,17 +1,16 @@
 import { defineConfig } from "vitest/config";
 import { atlasBinaryHashPlugin } from "./scripts/vite-plugin-atlas-binary-hash.mjs";
 
-const PLACEHOLDER_RULESET = "phase1-placeholder-do-not-share";
+// Phase 4.A.2 (atomic flip per addendum B1). The atlas-binary-hash
+// plugin owns `__ATLAS_BINARY_HASH__`, `__ATLAS_MISSING__`, and
+// `__RULESET_VERSION__` injection — its `config()` hook returns the
+// three keys with the values computed from the on-disk
+// `assets/atlas.png` plus `RULES_FILES`.
 
 export default defineConfig({
-  // Phase 4.A.1: `__RULESET_VERSION__` continues to inject the Phase 1
-  // placeholder per addendum B1. The atlas-binary-hash plugin (B5)
-  // injects `__ATLAS_BINARY_HASH__ = EMPTY_SHA256` and
-  // `__ATLAS_MISSING__ = true` while `assets/atlas.png` is absent.
   plugins: [atlasBinaryHashPlugin()],
   define: {
     __COMMIT_HASH__: JSON.stringify("dev0000"),
-    __RULESET_VERSION__: JSON.stringify(PLACEHOLDER_RULESET),
   },
   test: {
     globals: false,

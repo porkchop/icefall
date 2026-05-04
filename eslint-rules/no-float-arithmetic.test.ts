@@ -36,6 +36,16 @@ tester.run("no-float-arithmetic", rule, {
     "const arr = [1, 2, 3]; const n = arr.length;",
     "const big = 0x7fffffff;",
     "const neg = -123;",
+    // Phase 4.A.2: hex literals containing `e`/`E` (e.g. Wang-hash
+    // mixer constants) must NOT trigger the exponent-literal check.
+    // `e`/`E` are valid hex digits.
+    "const wangA = 0x1f1f1f1f;",
+    "const wangB = 0x9e3779b1;",
+    "const wangC = 0x45d9f3b;",
+    "const golden = 0xDEADBEEF;",
+    "const hexExp = 0xE5;",
+    "const binLit = 0b1010;",
+    "const octLit = 0o755;",
   ],
   invalid: [
     { code: "const x = 0.5;", errors: [{ messageId: "decimalLiteral" }] },

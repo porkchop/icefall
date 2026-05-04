@@ -2,8 +2,14 @@ import { sha256, sha256Hex, utf8, concat } from "./core/hash";
 
 declare const __COMMIT_HASH__: string;
 declare const __RULESET_VERSION__: string;
+declare const __ATLAS_BINARY_HASH__: string;
+declare const __ATLAS_MISSING__: boolean;
 
 export const PLACEHOLDER_RULESET_VERSION = "phase1-placeholder-do-not-share";
+
+/** SHA-256 of the empty byte string — the empty-atlas fallback. */
+export const EMPTY_SHA256 =
+  "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 
 export const commitHash: string =
   typeof __COMMIT_HASH__ !== "undefined" ? __COMMIT_HASH__ : "dev0000";
@@ -12,6 +18,25 @@ export const rulesetVersion: string =
   typeof __RULESET_VERSION__ !== "undefined"
     ? __RULESET_VERSION__
     : PLACEHOLDER_RULESET_VERSION;
+
+/**
+ * SHA-256 of the build-time `assets/atlas.png` (lowercase hex, 64
+ * chars). Injected by `scripts/vite-plugin-atlas-binary-hash.mjs`. When
+ * the file is missing the plugin injects `EMPTY_SHA256` and
+ * `__ATLAS_MISSING__ = true` (Phase 4 addendum B5).
+ */
+export const atlasBinaryHash: string =
+  typeof __ATLAS_BINARY_HASH__ !== "undefined"
+    ? __ATLAS_BINARY_HASH__
+    : EMPTY_SHA256;
+
+/**
+ * `true` when `assets/atlas.png` was absent at Vite-config-load time.
+ * Consumed by the atlas loader (refusal path) and the diagnostic
+ * preview UI (status banner).
+ */
+export const atlasMissing: boolean =
+  typeof __ATLAS_MISSING__ !== "undefined" ? __ATLAS_MISSING__ : true;
 
 /**
  * Canonical, alphabetically-sorted list of source files whose contents
@@ -36,9 +61,9 @@ export type RulesFileEntry = {
 };
 
 export const RULES_FILES: readonly RulesFileEntry[] = [
-  { path: "src/atlas/palette.ts", existsInPhase: "4.A.2" },
-  { path: "src/atlas/params.ts", existsInPhase: "4.A.2" },
-  { path: "src/registries/atlas-recipes.ts", existsInPhase: "4.A.2" },
+  { path: "src/atlas/palette.ts", existsInPhase: "4.A.1" },
+  { path: "src/atlas/params.ts", existsInPhase: "4.A.1" },
+  { path: "src/registries/atlas-recipes.ts", existsInPhase: "4.A.1" },
   { path: "src/registries/encounters.ts", existsInPhase: "4.A.1" },
   { path: "src/registries/items.ts", existsInPhase: "4.A.1" },
   { path: "src/registries/monsters.ts", existsInPhase: "4.A.1" },

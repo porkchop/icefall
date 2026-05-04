@@ -13,7 +13,8 @@
     "test:e2e": "playwright test",
     "typecheck": "tsc -b --noEmit",
     "gen-floor": "vite-node tools/gen-floor.ts",
-    "gen-fixtures": "vite-node tools/gen-fixtures.ts"
+    "gen-fixtures": "vite-node tools/gen-fixtures.ts",
+    "gen-atlas": "vite-node tools/gen-atlas.ts"
   },
   "dependencies": {
     "@noble/hashes": "1.6.1"

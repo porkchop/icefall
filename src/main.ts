@@ -1,5 +1,5 @@
 import { runSelfTests, selfTestNames, randomWalkDigest } from "./core/self-test";
-import { commitHash, rulesetVersion } from "./build-info";
+import { commitHash, rulesetVersion, atlasBinaryHash, atlasMissing } from "./build-info";
 import { fingerprint } from "./core/fingerprint";
 import { streamsForRun } from "./core/streams";
 import { seedToBytes } from "./core/seed";
@@ -10,6 +10,10 @@ import {
   SELF_TEST_INPUTS,
   SELF_TEST_LOG_100,
 } from "./sim/self-test-log";
+import { generateAtlas } from "./atlas/generate";
+import { ATLAS_PRESET_SEEDS } from "./atlas/preset-seeds";
+import { ATLAS_SEED_DEFAULT } from "./atlas/params";
+import { validateSeedString } from "./atlas/seed";
 
 declare global {
   interface Window {
@@ -21,6 +25,10 @@ declare global {
     __SIM_FINAL_STATE_HASH__: string | undefined;
     __SIM_OUTCOME__: "running" | "dead" | "won" | undefined;
     __SIM_FLOOR_REACHED__: number | undefined;
+    __ATLAS_PREVIEW__: "ready" | undefined;
+    __ATLAS_PREVIEW_BUILD_HASH__: string | undefined;
+    __ATLAS_PREVIEW_LIVE_HASH__: string | undefined;
+    __ATLAS_PREVIEW_SEED__: string | undefined;
   }
 }
 
@@ -270,6 +278,186 @@ function render(): void {
   runSim();
 
   root.appendChild(simSection);
+
+  // Phase 4.A.2: atlas preview UI (memo decision 9 + addendum B4 N12).
+  // Side-by-side comparison: build-time atlas (left) vs live-regen
+  // atlas (right). Cross-runtime determinism is asserted by Playwright
+  // via window.__ATLAS_PREVIEW_BUILD_HASH__ === __ATLAS_PREVIEW_LIVE_HASH__
+  // when the seed is ATLAS_SEED_DEFAULT.
+  const atlasSection = el("section", "atlas-preview");
+  atlasSection.id = "atlas-preview";
+  atlasSection.appendChild(el("h2", undefined, "Atlas preview"));
+  atlasSection.appendChild(
+    el(
+      "p",
+      "atlas-help",
+      "Phase 4 atlas: build-time PNG (left) vs in-browser regenerated PNG (right). Identical bytes prove cross-runtime determinism.",
+    ),
+  );
+
+  const atlasInputRow = el("div", "atlas-input-row");
+  const atlasSeedLabel = el("label", "atlas-seed-label", "atlas seed");
+  const atlasSeedInput = document.createElement("input");
+  atlasSeedInput.type = "text";
+  atlasSeedInput.id = "atlas-seed-input";
+  atlasSeedInput.value = ATLAS_SEED_DEFAULT;
+  atlasSeedLabel.appendChild(atlasSeedInput);
+  atlasInputRow.appendChild(atlasSeedLabel);
+
+  const atlasRegenButton = document.createElement("button");
+  atlasRegenButton.type = "button";
+  atlasRegenButton.id = "atlas-regenerate-button";
+  atlasRegenButton.textContent = "Regenerate atlas";
+  atlasInputRow.appendChild(atlasRegenButton);
+  atlasSection.appendChild(atlasInputRow);
+
+  const atlasPresets = el("div", "atlas-presets");
+  for (const preset of ATLAS_PRESET_SEEDS) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "atlas-preset-button";
+    btn.dataset["presetId"] = preset.id;
+    btn.textContent = preset.id;
+    btn.addEventListener("click", () => {
+      atlasSeedInput.value = preset.seed;
+      regenerateLive();
+    });
+    atlasPresets.appendChild(btn);
+  }
+  atlasSection.appendChild(atlasPresets);
+
+  const atlasErrorDiv = el("div", "atlas-preview-error");
+  atlasErrorDiv.id = "atlas-preview-error";
+  atlasSection.appendChild(atlasErrorDiv);
+
+  const atlasCanvasRow = el("div", "atlas-canvas-row");
+  const buildLabel = el("p", "atlas-canvas-label", "build-time");
+  const liveLabel = el("p", "atlas-canvas-label", "live regen");
+  const buildCanvas = document.createElement("canvas");
+  buildCanvas.id = "atlas-preview-canvas-build";
+  buildCanvas.className = "atlas-preview-canvas";
+  const liveCanvas = document.createElement("canvas");
+  liveCanvas.id = "atlas-preview-canvas";
+  liveCanvas.className = "atlas-preview-canvas";
+  atlasCanvasRow.appendChild(buildLabel);
+  atlasCanvasRow.appendChild(buildCanvas);
+  atlasCanvasRow.appendChild(liveLabel);
+  atlasCanvasRow.appendChild(liveCanvas);
+  atlasSection.appendChild(atlasCanvasRow);
+
+  const atlasReadout = el("dl", "atlas-readout");
+  atlasReadout.id = "atlas-readout";
+  atlasSection.appendChild(atlasReadout);
+
+  function setAtlasError(msg: string): void {
+    atlasErrorDiv.textContent = msg;
+  }
+
+  function clearAtlasError(): void {
+    atlasErrorDiv.textContent = "";
+  }
+
+  function drawPngToCanvas(
+    png: Uint8Array,
+    canvas: HTMLCanvasElement,
+  ): Promise<void> {
+    return new Promise((resolveDraw, rejectDraw) => {
+      const blob = new Blob([png], { type: "image/png" });
+      const url = URL.createObjectURL(blob);
+      const img = new Image();
+      img.onload = () => {
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        const ctx = canvas.getContext("2d");
+        if (ctx === null) {
+          URL.revokeObjectURL(url);
+          rejectDraw(new Error("atlas-preview: 2d context unavailable"));
+          return;
+        }
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(img, 0, 0);
+        URL.revokeObjectURL(url);
+        resolveDraw();
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        rejectDraw(new Error("atlas-preview: <img> decode failed"));
+      };
+      img.src = url;
+    });
+  }
+
+  function refreshReadout(seed: string, buildHash: string, liveHash: string): void {
+    atlasReadout.innerHTML = "";
+    function row(label: string, value: string): void {
+      atlasReadout.appendChild(el("dt", undefined, label));
+      atlasReadout.appendChild(el("dd", undefined, value));
+    }
+    row("seed", seed);
+    row("build hash", buildHash);
+    row("live hash", liveHash);
+    row("match", buildHash === liveHash ? "yes" : "no");
+  }
+
+  function regenerateLive(): void {
+    const seed = atlasSeedInput.value;
+    try {
+      validateSeedString(seed);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setAtlasError(
+        `atlas-preview: invalid atlas-seed (${msg})`,
+      );
+      return;
+    }
+    clearAtlasError();
+    const { png } = generateAtlas(seed);
+    const liveHash = sha256Hex(png);
+    window.__ATLAS_PREVIEW_LIVE_HASH__ = liveHash;
+    window.__ATLAS_PREVIEW_SEED__ = seed;
+    refreshReadout(seed, atlasBinaryHash, liveHash);
+    drawPngToCanvas(png, liveCanvas).catch((e) => {
+      setAtlasError(`atlas-preview: live canvas draw failed: ${e.message}`);
+    });
+  }
+
+  atlasRegenButton.addEventListener("click", () => {
+    regenerateLive();
+  });
+
+  // Initial render. If the build-time atlas is missing, surface that
+  // and skip the build-side fetch (addendum B5).
+  if (atlasMissing) {
+    setAtlasError(
+      "atlas-preview: assets/atlas.png is missing — run 'npm run gen-atlas' first",
+    );
+    window.__ATLAS_PREVIEW_BUILD_HASH__ = atlasBinaryHash;
+    window.__ATLAS_PREVIEW__ = "ready";
+  } else {
+    fetch(import.meta.env.BASE_URL + "assets/atlas.png")
+      .then((r) => r.arrayBuffer())
+      .then((buf) => {
+        const bytes = new Uint8Array(buf);
+        const buildHash = sha256Hex(bytes);
+        window.__ATLAS_PREVIEW_BUILD_HASH__ = buildHash;
+        return drawPngToCanvas(bytes, buildCanvas);
+      })
+      .then(() => {
+        // Live side runs synchronously — drives __ATLAS_PREVIEW_LIVE_HASH__.
+        regenerateLive();
+        window.__ATLAS_PREVIEW__ = "ready";
+      })
+      .catch((e) => {
+        setAtlasError(`atlas-preview: build atlas fetch failed: ${e.message}`);
+        // Still mark as ready so e2e doesn't time out; the error div
+        // is the diagnostic surface.
+        window.__ATLAS_PREVIEW_BUILD_HASH__ = atlasBinaryHash;
+        regenerateLive();
+        window.__ATLAS_PREVIEW__ = "ready";
+      });
+  }
+
+  root.appendChild(atlasSection);
 }
 
 render();

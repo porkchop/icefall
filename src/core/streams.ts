@@ -112,8 +112,58 @@ export type RunStreams = {
   sim(): PRNG;
   simFloor(floorN: number): PRNG;
   ui(): PRNG;
+  /**
+   * Phase 4 frozen contract — `streams.atlas(recipeId)` accessor (memo
+   * decision 1a + addendum B8). Per-call invariant: a single call
+   * advances `__consumed.size` by exactly 1 and records the key
+   * `"atlas:" + recipeId`. Repeat calls with the same `recipeId` are
+   * Set-deduplicated (advance by 0). The salt encoding `(name="atlas",
+   * salts=[recipeId])` is byte-distinct from `sim()` / `simFloor(N)` /
+   * `mapgen(N)` / `ui()` by construction.
+   *
+   * `recipeId` validation (decision 1a): well-formed UTF-16, 7-bit
+   * ASCII, `1 ≤ utf8(recipeId).length ≤ 64`. Violations throw the
+   * pinned error message.
+   */
+  atlas(recipeId: string): PRNG;
   readonly __consumed: ReadonlySet<string>;
 };
+
+const RECIPE_ID_BYTE_MAX = 64;
+
+/**
+ * Validate a recipe ID per the Phase 4 frozen contract (memo decision
+ * 1a). Recipe IDs are programmer-authored stable identifiers so the
+ * check is stricter than user-facing seed validation: 7-bit ASCII only,
+ * UTF-8 byte length in `[1, 64]`, well-formed UTF-16 (no lone
+ * surrogates).
+ */
+function validateRecipeId(recipeId: string): Uint8Array {
+  // The `isWellFormedUtf16` + ASCII-only checks both flow through the
+  // utf8 byte-length error message per addendum prose: "recipeId must
+  // be 7-bit ASCII, 1..64 utf8 bytes (got <length>: <repr>)". We
+  // collapse any well-formedness or non-ASCII failure into that single
+  // pinned message so test regex matches one shape.
+  const wellFormed = isWellFormedUtf16(recipeId);
+  const bytes = wellFormed ? utf8(recipeId) : new Uint8Array(0);
+  let asciiOk = wellFormed;
+  if (asciiOk) {
+    for (let i = 0; i < bytes.length; i++) {
+      if (bytes[i]! > 0x7f) {
+        asciiOk = false;
+        break;
+      }
+    }
+  }
+  const len = bytes.length;
+  const lengthOk = len >= 1 && len <= RECIPE_ID_BYTE_MAX;
+  if (!wellFormed || !asciiOk || !lengthOk) {
+    throw new Error(
+      `atlas: recipeId must be 7-bit ASCII, 1..${RECIPE_ID_BYTE_MAX} utf8 bytes (got ${len}: ${JSON.stringify(recipeId)})`,
+    );
+  }
+  return bytes;
+}
 
 export function streamsForRun(rootSeed: Uint8Array): RunStreams {
   const consumed = new Set<string>();
@@ -136,6 +186,11 @@ export function streamsForRun(rootSeed: Uint8Array): RunStreams {
     ui(): PRNG {
       consumed.add("ui");
       return streamPrng(rootSeed, "ui");
+    },
+    atlas(recipeId: string): PRNG {
+      validateRecipeId(recipeId);
+      consumed.add(`atlas:${recipeId}`);
+      return streamPrng(rootSeed, "atlas", recipeId);
     },
     get __consumed(): ReadonlySet<string> {
       return consumed;
