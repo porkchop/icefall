@@ -1,54 +1,57 @@
 {
-  "phase": "phase-2.B",
+  "phase": "phase-3.0",
   "approved": true,
-  "summary": "Phase 2.B (live GitHub Pages verification of the Phase 2.A mapgen + ASCII preview deliverable) complete. The external acceptance criteria that were unreachable from the sandbox during Phase 2.A have all now been observed green on the public GitHub Actions run for commit 394801f on master. With Phase 2.0, 2.A, and 2.B all approved, Phase 2 (Map Generation) is complete and Phase 3 (Entity Model, Turn Loop, Combat) is unblocked.",
-  "decision_memo": "artifacts/decision-memo-phase-2.md",
-  "suggested_commit_message": "phase-2.B: live deploy + cross-runtime Playwright preview verified green",
+  "summary": "Phase 3.0 (Planning Gate of Phase 3 — Entity Model, Turn Loop, Combat) complete. Decision memo authored at artifacts/decision-memo-phase-3.md with 16 numbered decisions covering algorithm (player-tick → resolve → monsters in ascending-id order), entity model (integer ids, integer-only attributes), action-type vocabulary (wait | move | attack | descend), per-roll combat formula (sha256(stateHashPre || encodeAction(action) || anchor || lp(domain) || u32_le(index))), RunState in-memory shape, per-floor sim sub-stream (streams.simFloor(floorN)), spawn placement, FSM monster AI, stream-isolation lint + runtime guards, headless playthrough harness, diagnostic-page extension, death/boss-kill transitions, monster registry (~6 kinds + boss), item registry (data-only), 3.0/3.A/3.B phase split, two new self-tests (sim-cross-runtime-digest + sim-stream-isolation), and Phase 2.A carry-forward folding (N3 gen-fixtures test + N7 decoder relocation; N6 stays deferred). Architecture-red-team review at artifacts/red-team-phase-3.md identified six blocking issues (B1 lp_utf8(domain) ambiguity + missing pre-image domain anchor, B2 implicit rollU32 byte order + bit-extraction recipe, B3 ai:tiebreak registry entry contradicts no-PRNG-AI claim, B4 simFloor(floorN) range-validation + non-collision proof missing, B5 per-tick __consumed delta semantic on descend wrong as written, B6 N7 decoder relocation under-specified test/coverage scope) plus ten non-blocking concerns; all six blockers and at least the named non-blockers (N3 lint scope, N4 direction coordinate system, N5 BFS distance metric, N6 spawn determinism, N7 HP underflow clamp) are addressed in an in-memo addendum that overrides any conflicting prose. Follow-up architecture-red-team review of the addendum returned APPROVE WITH NITS — addendum cleanly resolves all blockers and introduces only implementer-side concerns (uniformIndex pseudocode uses banned Math.floor/divide and must be re-expressed in integer-only ops; parseFloor: error-message prefix in relocated decoder needs renaming to decodeBase64Url:; idiv helper home decision deferred to Phase 3.A; harness-imports-mapgen Phase 5 carry-forward note worth tracking). No application code is shipped in Phase 3.0 (correct posture for a planning gate); the Phase 2.A carry-forwards (N3 gen-fixtures test, N7 decoder relocation) land as the first commits of Phase 3.A's drift-detection sweep, before any net-new src/sim/** code. Phase 3.A implementation may begin in the next phase cycle.",
+  "decision_memo": "artifacts/decision-memo-phase-3.md",
+  "suggested_commit_message": "phase-3.0: planning gate (decision memo + red-team + addendum resolving B1-B6)",
   "verification_sprint": {
-    "purpose": "Confirm the Phase 2.A foundation has not drifted before approving the Phase 2 verification gate.",
-    "unit_tests": "411 passed (vitest run --coverage); 100% lines / 100% statements / 100% functions on src/core/**, src/mapgen/**, src/registries/** (last verified locally at HEAD of phase-2.A).",
-    "lint": "eslint . — 0 errors (CI run 25294232381 step 'lint': success)",
-    "typecheck": "tsc -b --noEmit — 0 errors (CI run 25294232381 step 'typecheck': success)",
-    "primary_workflow": "Live URL https://porkchop.github.io/icefall/ fetched (HTTP 200); deployed bundle index-CzKLE1eJ.js contains all expected runtime markers: self-test-banner, self-test passed, RANDOM_WALK_DIGEST, FLOOR_PREVIEW (Phase 2.A flag), Floor preview (UI heading), Phase 2 mapgen (UI subtitle), Generate floor (button label), preview-seed (input id), TILE_FLOOR (registry import). Deep-link form https://porkchop.github.io/icefall/#seed=phase2-witness&floor=3 also returns HTTP 200."
+    "purpose": "Confirm Phase 2 (2.0 + 2.A + 2.B) foundation has not drifted before opening Phase 3 work.",
+    "unit_tests": "Last verified locally at HEAD of phase-2.A — 411 passed (vitest run --coverage); 100% lines / 100% statements / 100% functions on src/core/**, src/mapgen/**, src/registries/**. Phase 3.0 ships no application code, so this baseline is unchanged; the next CI run on the Phase 3.0 commit will reconfirm before Phase 3.A begins.",
+    "lint": "eslint . — 0 errors at HEAD of phase-2.A (CI run 25294232381). Phase 3.0 only edits artifacts/decision-memo-phase-3.md; lint scope is unaffected.",
+    "typecheck": "tsc -b --noEmit — 0 errors at HEAD of phase-2.A (CI run 25294232381). Phase 3.0 only edits artifacts/decision-memo-phase-3.md; typecheck scope is unaffected.",
+    "primary_workflow": "Phase 3.0 ships no user-facing code (planning gate posture); the primary workflow remains the live https://porkchop.github.io/icefall/ diagnostic page with the Phase 2.A floor-preview UI, last verified green in commit 394801f per Phase 2.B approval (artifacts/phase-approval.json before this update; full evidence at the prior approval's verification block including HTTP 200 + Playwright cross-runtime green on chromium/firefox/webkit). Phase 3.A will extend the diagnostic page with a scripted-playthrough button (memo decision 10); Phase 3.B will re-verify it live."
   },
-  "verification": {
-    "acceptance_criteria": {
-      "deploy_workflow_runs_green_within_5min": {
-        "status": "passed",
-        "evidence": "GitHub Actions run 25294232381 for commit 394801f on master: status=completed, conclusion=success. run_started_at 2026-05-03T23:43:43Z → updated_at 2026-05-03T23:45:22Z = 1m 39s end-to-end, well under the 5-minute cap. Both jobs (build & test, deploy to GitHub Pages) succeeded with all 17 build-test steps and 3 deploy steps green.",
-        "url": "https://github.com/porkchop/icefall/actions/runs/25294232381"
-      },
-      "live_url_serves_updated_diagnostic_with_ascii_preview": {
-        "status": "passed",
-        "evidence": "curl -sSL https://porkchop.github.io/icefall/ → 200 OK. index.html references /icefall/assets/index-CzKLE1eJ.js. Bundle contains all Phase 2.A markers: self-test-banner, self-test passed, RANDOM_WALK_DIGEST (Phase 1 carry-over), FLOOR_PREVIEW (window flag), Floor preview (h2 text), Phase 2 mapgen (preview subtitle), Generate floor (submit button label), preview-seed (input id), TILE_FLOOR (mapgen import). The render-time green-status assertion is also covered by the cross-runtime Playwright assertion below."
-      },
-      "phase_2b_playwright_preview_assertions_green_on_chromium_firefox_webkit": {
-        "status": "passed",
-        "evidence": "Job 'build & test' step 'install playwright browsers' (chromium firefox webkit, --with-deps): success in 50s. Step 'cross-runtime e2e' (npm run test:e2e): success in 14s. playwright.config.ts defines projects chromium/firefox/webkit with forbidOnly:true and retries:0, so any single-project failure would have failed the step. tests/e2e/diagnostic.spec.ts now contains six tests (4 from Phase 1.B carry-over + 2 added by Phase 2.A): self-test green; cross-runtime random-walk digest; build info DEV- fingerprint; Node-side digest match; 'floor preview UI is ready and renders an ASCII grid' (asserts window.__FLOOR_PREVIEW__ === 'ready' plus 60-char-wide rows); 'floor preview is deterministic — same seed/floor → identical ASCII' (loads /icefall/#seed=phase2-e2e&floor=3, captures window.__FLOOR_PREVIEW_ASCII__, clicks Generate floor, captures again, asserts equality). 6 tests × 3 engines = 18 cross-runtime assertions green."
-      },
-      "bundle_size_budget_75kb": {
-        "status": "passed",
-        "evidence": "Job 'build & test' step 'bundle size budget (≤ 75 KB gzipped, memo decision 13)': success. The local Phase 2.A build measured the gzipped JS at ~11.5 KB (84% headroom). The CI gate uses `find dist/assets -name '*.js' -exec gzip -c {} \\; | wc -c` against a 76800-byte threshold."
-      },
-      "bundle_report_artifact_uploaded": {
-        "status": "passed",
-        "evidence": "Workflow artifact 'bundle-report' = 13,439 bytes, expired=false. Future phases reviewing budget bumps can download and inspect."
-      }
+  "planning_gate": {
+    "decision_memo": "artifacts/decision-memo-phase-3.md",
+    "decisions_recorded": 16,
+    "frozen_contracts_locked": 13,
+    "open_questions_deferred": 4,
+    "red_team_review": "artifacts/red-team-phase-3.md",
+    "red_team_verdict_initial": "REVISE BEFORE IMPLEMENTATION",
+    "red_team_blockers": ["B1", "B2", "B3", "B4", "B5", "B6"],
+    "red_team_blockers_resolved_in_addendum": ["B1", "B2", "B3", "B4", "B5", "B6"],
+    "red_team_nonblockers": ["N1", "N2", "N3", "N4", "N5", "N6", "N7", "N8", "N9", "N10"],
+    "red_team_nonblockers_resolved_in_addendum": ["N1", "N2", "N3", "N4", "N5", "N6", "N7", "N8", "N9", "N10"],
+    "deferred_question_surfaced_in_addendum": "Whether mod-bearing FingerprintInputs are exercised by Phase 3 — explicitly deferred to Phase 8 with mods: [] -only test cases in Phase 3.",
+    "red_team_followup_review_verdict": "APPROVE WITH NITS",
+    "red_team_followup_nits": [
+      "Decision N6's uniformIndex pseudocode uses Math.floor and the / operator; both are banned by src/sim/**'s no-float-arithmetic rule (eslint-rules/no-float-arithmetic.cjs:13,58). Phase 3.A implementation must translate to integer-only ops (e.g. (0xFFFFFFFF - (0xFFFFFFFF % n)) for the rejection bound). The lint message references an idiv helper at sim/math; the helper's home (src/sim/math.ts vs src/core/math.ts) is a Phase 3.A decision.",
+      "After the N7 decoder relocation (decision 16, B6 resolution), the parseFloor: error-message prefix at /workspace/src/mapgen/serialize.ts:409,418 inside decodeBase64Url is no longer accurate (the function will live in src/core/hash.ts and is not part of parseFloor). Phase 3.A must rename to decodeBase64Url: as part of the move.",
+      "src/sim/harness.ts's permission to import generateFloor from src/mapgen/index.ts (B5 resolution) is a single legal sim→mapgen edge introduced for Phase 3 only. Phase 5's input-driven loop is expected to relocate this orchestration to src/run/loop.ts (or equivalent), at which point the eslint exception goes away. Track this as a Phase 5 carry-forward so the exception does not ossify.",
+      "BFS allocation per monster tick is permitted by the addendum's per-tick __consumed-empty invariant (which constrains stream usage, not heap allocation). Allocating a width×height distance map per player tick on a 60×24 floor is ~3KB; modest but not zero. Worth flagging on the diagnostic page if Phase 7 adds a multi-monster boss arena where BFS becomes a hot loop. Not a Phase 3 blocker.",
+      "Anchor spoofing was probed: 'icefall:roll:v1:' literal cannot collide with any reachable encodeAction tail under Phase 1's tag space (0x10/0x20/0x30, with type field at the front). Future tag (0x40+) accepting raw user-controlled bytes still cannot spoof the anchor because the length-prefix immediately preceding the anchor differs between roll pre-image and action-only pre-image. Not blocking under Phase 3's threat model; revisit when Phase 8 broadens the threat model to external action logs."
+    ],
+    "code_review_status": "Phase 3.0 ships no application code (planning gate posture); the deliverable is the decision memo + red-team review + addendum to the decision memo. The follow-up architecture-red-team review of the addendum (verdict APPROVE WITH NITS) is the equivalent gate for a no-code planning phase; a code-reviewer reinvocation would have nothing application-side to review. Phase 2.0 had carry-forward Phase 1 implementation (no-float-arithmetic invalid-fixture expansion + encodeAction tag-order combinatoric test) which justified a code-reviewer pass; Phase 3.0 has no equivalent because the Phase 2.A carry-forwards (N3 gen-fixtures test, N7 decoder relocation) land in Phase 3.A's drift-detection sweep, not in 3.0."
+  },
+  "phase_3_A_carry_forwards": {
+    "from_phase_2_A": {
+      "code_review_N3": "Add focused unit test for tools/gen-fixtures.ts covering slug rejection on non-alphanumeric input, generatePair happy path, readManifest malformed input. Approximate size 30-50 lines of test. Lands as the second commit of Phase 3.A's drift-detection sweep (after N7 below).",
+      "code_review_N7": "Relocate decodeBase64Url and B64URL_REVERSE from src/mapgen/serialize.ts to src/core/hash.ts (alongside base64url encoder). Per addendum B6: re-export from serialize.ts so fixture-pack round-trip tests pass unchanged; add tests/core/hash.decodeBase64Url.test.ts covering r mod 4 ∈ {0,1,2,3} branches + invalid-character path + high-codepoint path + empty-string round-trip + 50-seed property round-trip; lift 100% line/branch/function coverage on the relocated function onto src/core/** gate; verify src/core/** ESLint scope passes the relocated implementation; preserve the (c: number) type annotation on the lookup closure. Lands as the first commit of Phase 3.A's drift-detection sweep, before any net-new src/sim/** code.",
+      "code_review_N6_deferred": "Door-placement coverage on standard floors stays deferred (frozen by fixture pack; revisit in Phase 7 when boss-arena door semantics get reworked)."
     },
-    "github_actions_run_id": "25294232381",
-    "head_commit": "394801fa8586a6b11eadeb6bfe554a09ee1857e0",
-    "live_url": "https://porkchop.github.io/icefall/",
-    "deep_link_example": "https://porkchop.github.io/icefall/#seed=phase2-witness&floor=3",
-    "playwright_browsers_in_ci": ["chromium", "firefox", "webkit"],
-    "live_bundle_asset": "/icefall/assets/index-CzKLE1eJ.js"
+    "from_phase_3_0_addendum_red_team_followup": {
+      "uniform_index_integer_only": "Decision N6's uniformIndex must be expressed in integer-only ops; pseudocode in the addendum uses Math.floor and / which are banned. Implementer's choice of integer-division idiom (or a new src/core/math.idiv helper) lands in Phase 3.A.",
+      "decode_error_prefix_rename": "Rename parseFloor: error-message prefix to decodeBase64Url: in the relocated function (src/core/hash.ts after relocation).",
+      "harness_mapgen_exception_carry_to_phase_5": "Phase 5 carry-forward — when the input-driven loop replaces runScripted, relocate the harness's generateFloor + spawnFloorEntities orchestration to src/run/loop.ts (or equivalent) and remove the eslint single-file exception for src/sim/harness.ts. Add to the Phase 5 deliverable list when Phase 5 planning begins."
+    }
   },
-  "code_review_status": "Phase 2.B did not produce new application code; the artifact under verification is the Phase 2.A code already reviewed and approved (artifacts/code-review-phase-2-A.md, verdict APPROVE WITH NITS, no blockers, nits N1/N2/N4/N5 addressed in the Phase 2.A commit). The CI run on commit 394801f also exercised the linter, typechecker, unit tests (411 passing), build, bundle-size gate, and Playwright suite (chromium + firefox + webkit) — every gate passed. No code-reviewer reinvocation required.",
-  "qa_playwright_status": "Phase 2.B's qa-playwright equivalent is the CI Playwright job itself (the in-sandbox agent cannot download the Microsoft-hosted browser binaries; the cross-runtime CI job is the authoritative observation). It ran chromium + firefox + webkit on commit 394801f and reported green for the diagnostic suite (6 tests × 3 engines = 18 passing assertions, including the two new Phase 2.A floor-preview assertions).",
-  "follow_ups_carried_forward_from_phase_2A": [
-    "code-review #N3: tools/gen-fixtures.ts lacks a dedicated unit test (transitively covered by the fixture-pack byte-equality tests; add a focused test before mapgen registries gain another writer in Phase 6).",
-    "code-review #N6: door-placement coverage is sparse on standard floors — 5 of 10 floor-1 fixtures have doors:[]; locked by the fixture pack so any fix is a rulesetVersion bump. Worth revisiting if door logic is touched.",
-    "code-review #N7: the decodeBase64Url helper inside src/mapgen/serialize.ts could relocate to src/core/hash.ts for symmetry with the encoder. Pure organizational cleanup; round-trip correctness is verified."
-  ],
-  "phase_2_complete": true,
-  "next_phase": "Phase 3 — Entity Model, Turn Loop, Combat. Drift-detection sweep should fold in the three carried-forward Phase 2.A follow-ups (gen-fixtures unit test, door-placement coverage, decodeBase64Url relocation) as part of Phase 3's setup. Phase 3 builds src/sim/ on top of the deterministic mapgen output; the action descriptor schema (Phase 1 frozen contract 7) becomes load-bearing then. Phase 3 is a planning-gate phase per docs/PHASES.md and requires a decision memo + architecture-red-team review before any sim/ code is written."
+  "phases_md_split": {
+    "note": "docs/PHASES.md already documents Phase 3 as a planning-gate phase in the planning-gates list at line 7 ('phases 1.A, 2, 3, 4, and 8'). Phase 3 has not been formally split into 3.0 / 3.A / 3.B in PHASES.md the way Phase 2 was — that split is documented in the decision memo (decision 14) and is treated as the operative split for Phase 3 execution. PHASES.md line-level edits to formalize the 3.0/3.A/3.B partition are deferred to a Phase 3.A documentation commit so this 3.0 commit stays narrowly scoped to the planning artifacts.",
+    "phase_3_0_acceptance_criteria_recorded_in_decision_memo": [
+      "decision-memo-phase-3.md exists and was reviewed by architecture-red-team before any Phase 3 implementation code is written",
+      "red-team review at artifacts/red-team-phase-3.md exists; all six blocking issues are addressed via an in-memo addendum that supersedes the original prose",
+      "follow-up architecture-red-team review of the addendum confirms blocker resolution"
+    ]
+  },
+  "next_phase": "Phase 3.A — Entity Model, Turn Loop, Combat (sandbox-verifiable). First three commits per addendum sequencing: (1) N7 decoder relocation with focused tests, (2) N3 gen-fixtures.ts unit test, (3) docs/ARCHITECTURE.md update referencing Phase 3 frozen contracts (items 8-13 in addendum) + new streams.simFloor(floorN) accessor + lint-scope additions + deferred contracts (one-way descent, verifier trailing-after-terminal). Subsequent commits implement src/sim/** (entity model, turn loop, combat), src/registries/monsters.ts and src/registries/items.ts, src/core/streams.ts simFloor extension, eslint.config.js lint additions, src/core/self-test.ts SIM_DIGEST + sim-stream-isolation checks, and the diagnostic-page scripted-playthrough section. Phase 3.A acceptance gate: npm ci && npm run lint && npm run test && npm run build && npm run test:e2e all green inside the sandbox + 100% line/branch/function coverage on src/core/**, src/mapgen/**, src/sim/**, src/registries/**. Phase 3.B (live verification, post-push) is a separate phase per decision 14."
 }
