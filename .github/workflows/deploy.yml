@@ -69,9 +69,86 @@ jobs:
         with:
           path: dist
 
+  # Phase 4.B cross-OS PNG byte-equality matrix (memo addendum N14).
+  # Each runner regenerates assets/atlas.png and uploads it; the
+  # aggregate job below asserts pairwise SHA-256 equality. fail-fast:
+  # false so a single-OS failure still surfaces the other two hashes
+  # for diagnosis. Node 20.x is pinned — a runner-image bump that
+  # ships Node 22 mid-2026 could subtly change fflate's output and is
+  # an architecture-red-team review event per addendum N14.
+  cross-os-atlas-equality:
+    name: cross-os atlas equality (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node-version: ["20.x"]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: "npm"
+      - name: install
+        run: npm ci
+      - name: regenerate atlas
+        run: npm run gen-atlas
+      # Decision 10's CI gate: the regenerated assets/atlas.png MUST
+      # match the checked-in bytes. Any drift means the source-of-truth
+      # is stale; fail loudly with the diff visible.
+      - name: assert regen matches checked-in atlas
+        shell: bash
+        run: git diff --exit-code -- assets/
+      - name: upload regenerated atlas
+        uses: actions/upload-artifact@v4
+        with:
+          name: atlas-png-${{ matrix.os }}
+          path: assets/atlas.png
+          if-no-files-found: error
+          retention-days: 30
+
+  cross-os-atlas-equality-aggregate:
+    name: cross-os atlas equality (aggregate)
+    needs: cross-os-atlas-equality
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: download ubuntu artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: atlas-png-ubuntu-latest
+          path: out/ubuntu
+      - name: download macos artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: atlas-png-macos-latest
+          path: out/macos
+      - name: download windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: atlas-png-windows-latest
+          path: out/windows
+      - name: assert pairwise SHA-256 equality
+        shell: bash
+        run: |
+          set -e
+          ubuntu_hash=$(sha256sum out/ubuntu/atlas.png | awk '{print $1}')
+          macos_hash=$(sha256sum out/macos/atlas.png | awk '{print $1}')
+          windows_hash=$(sha256sum out/windows/atlas.png | awk '{print $1}')
+          echo "ubuntu-latest:  ${ubuntu_hash}"
+          echo "macos-latest:   ${macos_hash}"
+          echo "windows-latest: ${windows_hash}"
+          if [ "${ubuntu_hash}" != "${macos_hash}" ] || [ "${ubuntu_hash}" != "${windows_hash}" ]; then
+            echo "::error::Cross-OS atlas hash drift detected — see per-OS hashes above"
+            exit 1
+          fi
+          echo "All three runners produced byte-identical assets/atlas.png."
+
   deploy:
     name: deploy to GitHub Pages
-    needs: build
+    needs: [build, cross-os-atlas-equality-aggregate]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     environment:
