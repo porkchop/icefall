@@ -236,3 +236,61 @@ describe("RunStreams.__consumed tracker (frozen contract 11)", () => {
     expect(view.has("mapgen:7")).toBe(true);
   });
 });
+
+describe("simFloor accessor (Phase 3 addendum B4)", () => {
+  it("records sim:<floorN> on first call", () => {
+    const streams = streamsForRun(ROOT_A);
+    streams.simFloor(3);
+    expect([...streams.__consumed]).toEqual(["sim:3"]);
+  });
+
+  it("returns the same PRNG sequence as streamPrng(rootSeed, 'sim', floorN)", () => {
+    const streams = streamsForRun(ROOT_A);
+    const got = streams.simFloor(5);
+    const expected = streamPrng(ROOT_A, "sim", 5);
+    for (let i = 0; i < 8; i++) expect(got()).toBe(expected());
+  });
+
+  it("simFloor(N) and sim() produce distinct sequences (non-collision)", () => {
+    const a = drawN(streamPrng(ROOT_A, "sim"), 8);
+    const b = drawN(streamPrng(ROOT_A, "sim", 1), 8);
+    expect(Array.from(a)).not.toEqual(Array.from(b));
+  });
+
+  it("simFloor(1) and simFloor(2) produce distinct sequences", () => {
+    const a = drawN(streamPrng(ROOT_A, "sim", 1), 8);
+    const b = drawN(streamPrng(ROOT_A, "sim", 2), 8);
+    expect(Array.from(a)).not.toEqual(Array.from(b));
+  });
+
+  it("__consumed records 'sim' (no colon) for sim() and 'sim:N' for simFloor(N) — distinct keys", () => {
+    const streams = streamsForRun(ROOT_A);
+    streams.sim();
+    streams.simFloor(1);
+    expect([...streams.__consumed].sort()).toEqual(["sim", "sim:1"]);
+  });
+
+  it("rejects floorN below 1", () => {
+    const streams = streamsForRun(ROOT_A);
+    expect(() => streams.simFloor(0)).toThrowError(/floorN must be 1\.\.10/);
+    expect(() => streams.simFloor(-1)).toThrowError(/floorN must be 1\.\.10/);
+  });
+
+  it("rejects floorN above 10", () => {
+    const streams = streamsForRun(ROOT_A);
+    expect(() => streams.simFloor(11)).toThrowError(/floorN must be 1\.\.10/);
+    expect(() => streams.simFloor(99)).toThrowError(/floorN must be 1\.\.10/);
+  });
+
+  it("rejects non-integer floorN", () => {
+    const streams = streamsForRun(ROOT_A);
+    expect(() => streams.simFloor(1.5)).toThrowError(/floorN must be 1\.\.10/);
+    expect(() => streams.simFloor(NaN)).toThrowError(/floorN must be 1\.\.10/);
+  });
+
+  it("accepts the boundary values 1 and 10", () => {
+    const streams = streamsForRun(ROOT_A);
+    expect(() => streams.simFloor(1)).not.toThrow();
+    expect(() => streams.simFloor(10)).not.toThrow();
+  });
+});

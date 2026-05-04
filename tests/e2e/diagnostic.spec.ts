@@ -3,6 +3,9 @@ import { test, expect } from "@playwright/test";
 const RANDOM_WALK_DIGEST =
   "142c5ee954cbcd40ea846f00c117bb59828bd61256729b2079c875d2c85dbac4";
 
+const SIM_DIGEST =
+  "321c09e5f87e879aebdf58ccaaada5e85f8a114bf01f4e012039eced5dba079e";
+
 test("diagnostic page reports self-test green", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator("#self-test-banner")).toHaveAttribute(
@@ -83,4 +86,38 @@ test("floor preview is deterministic — same seed/floor → identical ASCII", a
   await page.locator("#preview-generate").click();
   const b = await page.evaluate(() => window.__FLOOR_PREVIEW_ASCII__);
   expect(a).toBe(b);
+});
+
+test("scripted-playthrough section runs and reports the SIM_DIGEST", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await expect(page.locator("#sim-scripted")).toBeVisible();
+  // The harness runs once on initial render so the flag should be set
+  // before the click; assert via the window flag.
+  await page.waitForFunction(
+    () => typeof window.__SIM_FINAL_STATE_HASH__ === "string",
+    null,
+    { timeout: 10_000 },
+  );
+  const hash = await page.evaluate(() => window.__SIM_FINAL_STATE_HASH__);
+  expect(hash).toBe(SIM_DIGEST);
+});
+
+test("scripted-playthrough button is idempotent — re-clicking produces same hash", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.waitForFunction(
+    () => typeof window.__SIM_FINAL_STATE_HASH__ === "string",
+    null,
+    { timeout: 10_000 },
+  );
+  const a = await page.evaluate(() => window.__SIM_FINAL_STATE_HASH__);
+  await page.locator("#scripted-run").click();
+  const b = await page.evaluate(() => window.__SIM_FINAL_STATE_HASH__);
+  expect(a).toBe(b);
+  expect(a).toBe(SIM_DIGEST);
+  const outcome = await page.evaluate(() => window.__SIM_OUTCOME__);
+  expect(outcome).toBe("running");
 });

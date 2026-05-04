@@ -13,14 +13,21 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       reporter: ["text", "html", "json-summary"],
-      include: ["src/core/**", "src/mapgen/**", "src/registries/**"],
+      include: [
+        "src/core/**",
+        "src/mapgen/**",
+        "src/registries/**",
+        "src/sim/**",
+      ],
       exclude: [
         "src/core/**/*.test.ts",
         "src/mapgen/**/*.test.ts",
         "src/registries/**/*.test.ts",
-        // Pure-type declaration file: no executable code, so v8
-        // reports it as 0/0 which fails the 100% threshold.
+        "src/sim/**/*.test.ts",
+        // Pure-type declaration files: no executable code, so v8
+        // reports as 0/0 which fails the 100% threshold.
         "src/mapgen/types.ts",
+        "src/sim/types.ts",
       ],
       thresholds: {
         "src/core/**": {
@@ -38,6 +45,22 @@ export default defineConfig({
         "src/registries/**": {
           lines: 100,
           statements: 100,
+          functions: 100,
+          branches: 85,
+        },
+        // Phase 3.A.2 sim coverage: lines/statements/functions at 95
+        // (not 100) covers the remaining defensive race-condition
+        // paths — monster-boxed-in (ai.ts:165-166), move-target-
+        // raced-blocked (turn.ts:249-257), and the rejection-sample
+        // re-draw branch (run.ts:55, ~1.4e-9 probability per draw).
+        // These are correctness-important fallbacks that resist
+        // direct unit-test exercise; the property-style stress on
+        // SIM_DIGEST plus the 100-action self-test log are the
+        // load-bearing assertions. Branch threshold matches the
+        // Phase 2 mapgen/registries precedent.
+        "src/sim/**": {
+          lines: 95,
+          statements: 95,
           functions: 100,
           branches: 85,
         },

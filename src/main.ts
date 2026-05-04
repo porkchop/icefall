@@ -3,7 +3,13 @@ import { commitHash, rulesetVersion } from "./build-info";
 import { fingerprint } from "./core/fingerprint";
 import { streamsForRun } from "./core/streams";
 import { seedToBytes } from "./core/seed";
+import { sha256Hex } from "./core/hash";
 import { generateFloor, renderAscii } from "./mapgen/index";
+import { runScripted } from "./sim/harness";
+import {
+  SELF_TEST_INPUTS,
+  SELF_TEST_LOG_100,
+} from "./sim/self-test-log";
 
 declare global {
   interface Window {
@@ -12,6 +18,9 @@ declare global {
     __RANDOM_WALK_DIGEST__: string | undefined;
     __FLOOR_PREVIEW__: "ready" | undefined;
     __FLOOR_PREVIEW_ASCII__: string | undefined;
+    __SIM_FINAL_STATE_HASH__: string | undefined;
+    __SIM_OUTCOME__: "running" | "dead" | "won" | undefined;
+    __SIM_FLOOR_REACHED__: number | undefined;
   }
 }
 
@@ -204,6 +213,63 @@ function render(): void {
   window.__FLOOR_PREVIEW__ = "ready";
 
   root.appendChild(previewSection);
+
+  // Phase 3.A.2: scripted playthrough section. Exercises the headless
+  // sim harness against the same SELF_TEST_INPUTS / SELF_TEST_LOG_100
+  // pinned by the SIM_DIGEST self-test. Cross-runtime Playwright reads
+  // window.__SIM_FINAL_STATE_HASH__ + __SIM_OUTCOME__ to verify
+  // browser-side determinism end-to-end.
+  const simSection = el("section", "scripted-sim");
+  simSection.id = "sim-scripted";
+  simSection.appendChild(el("h2", undefined, "Scripted playthrough"));
+  simSection.appendChild(
+    el(
+      "p",
+      "scripted-help",
+      "Phase 3 sim: run a fixed 100-action scripted playthrough against the self-test seed. The final state hash is pinned by SIM_DIGEST.",
+    ),
+  );
+
+  const simButton = document.createElement("button");
+  simButton.type = "button";
+  simButton.id = "scripted-run";
+  simButton.textContent = "Run scripted playthrough";
+  simSection.appendChild(simButton);
+
+  const simOutput = el("dl", "scripted-output");
+  simOutput.id = "scripted-output";
+  simSection.appendChild(simOutput);
+
+  function runSim(): void {
+    const result = runScripted({
+      inputs: SELF_TEST_INPUTS,
+      actions: SELF_TEST_LOG_100,
+    });
+    const finalHash = sha256Hex(result.finalState.stateHash);
+    window.__SIM_FINAL_STATE_HASH__ = finalHash;
+    window.__SIM_OUTCOME__ = result.outcome;
+    window.__SIM_FLOOR_REACHED__ = result.finalState.floorN;
+
+    simOutput.innerHTML = "";
+    function addRow(label: string, value: string): void {
+      simOutput.appendChild(el("dt", undefined, label));
+      simOutput.appendChild(el("dd", undefined, value));
+    }
+    addRow("final state hash", finalHash);
+    addRow("outcome", result.outcome);
+    addRow("floor reached", String(result.finalState.floorN));
+    addRow("logLength", String(result.logLength));
+  }
+
+  simButton.addEventListener("click", () => {
+    runSim();
+  });
+
+  // Run once on initial render so the page is in its final state for
+  // Playwright assertions without requiring a click.
+  runSim();
+
+  root.appendChild(simSection);
 }
 
 render();

@@ -11,6 +11,14 @@ import {
 import { PLACEHOLDER_RULESET_VERSION } from "../build-info";
 import { generateFloor } from "../mapgen/generate";
 import { serializeFloor } from "../mapgen/serialize";
+import { runScripted, buildInitialRunState } from "../sim/harness";
+import { tick } from "../sim/turn";
+import {
+  SELF_TEST_INPUTS,
+  SELF_TEST_LOG_100,
+} from "../sim/self-test-log";
+import { ACTION_TYPE_WAIT } from "../sim/params";
+import { seedToBytes } from "./seed";
 
 /**
  * Hardcoded golden digest of a 1,000-step random walk over the state
@@ -39,6 +47,21 @@ export const RANDOM_WALK_DIGEST =
  */
 export const MAPGEN_DIGEST =
   "d212f5cfe17ae03d03433a4119103a003f0ecfee6a2e6c0610a383d506e4473d";
+
+/**
+ * Hardcoded golden digest of the final state hash after running
+ * `SELF_TEST_LOG_100` (a fixed 100-action log) against
+ * `SELF_TEST_INPUTS` (a fixed `FingerprintInputs`). Pinning point for
+ * cross-runtime sim determinism: any silent drift in the turn loop,
+ * AI FSM, combat formula, or roll derivation surfaces here in any
+ * runtime (Node, Chromium, Firefox, WebKit).
+ *
+ * Frozen-contract item 12 from Phase 3 decision memo. Changing this
+ * constant is a `rulesetVersion` bump and requires
+ * `architecture-red-team` review.
+ */
+export const SIM_DIGEST =
+  "321c09e5f87e879aebdf58ccaaada5e85f8a114bf01f4e012039eced5dba079e";
 
 const DIRECTIONS = ["wait", "move", "use", "attack"] as const;
 
@@ -257,6 +280,49 @@ const checks: Check[] = [
       assert(
         after2.length === 2 && after2[0] === "mapgen:1" && after2[1] === "mapgen:2",
         `expected ['mapgen:1','mapgen:2'] after second call, got ${JSON.stringify(after2)}`,
+      );
+    },
+  },
+  {
+    name: "sim-cross-runtime-digest",
+    run() {
+      const result = runScripted({
+        inputs: SELF_TEST_INPUTS,
+        actions: SELF_TEST_LOG_100,
+      });
+      const got = sha256Hex(result.finalState.stateHash);
+      assert(
+        got === SIM_DIGEST,
+        `sim-cross-runtime-digest mismatch: actual=${got}`,
+      );
+    },
+  },
+  {
+    name: "sim-stream-isolation",
+    run() {
+      // Fresh streams (per addendum N9) — never share with another check.
+      const rootSeed = seedToBytes(SELF_TEST_INPUTS.seed);
+      const streams = streamsForRun(rootSeed);
+
+      // Floor-1 entry block consumes mapgen:1 + sim:1.
+      const state0 = buildInitialRunState(SELF_TEST_INPUTS, streams);
+      const afterEntry = [...streams.__consumed].sort();
+      assert(
+        afterEntry.length === 2 &&
+          afterEntry[0] === "mapgen:1" &&
+          afterEntry[1] === "sim:1",
+        `expected ['mapgen:1','sim:1'] after floor-1 entry, got ${JSON.stringify(afterEntry)}`,
+      );
+
+      // One tick must consume nothing (per-tick __consumed-empty
+      // invariant — frozen-contract item 9).
+      const before = [...streams.__consumed].sort();
+      tick(state0, { type: ACTION_TYPE_WAIT });
+      const after = [...streams.__consumed].sort();
+      assert(
+        before.length === after.length &&
+          before.every((k, i) => k === after[i]),
+        `expected per-tick __consumed delta empty, got before=${JSON.stringify(before)} after=${JSON.stringify(after)}`,
       );
     },
   },

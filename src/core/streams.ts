@@ -100,10 +100,17 @@ export function streamPrng(
  * `__consumed` is a `ReadonlySet<string>` view; the underlying mutable
  * set is private to this module. Frozen contract — see
  * `artifacts/decision-memo-phase-2.md` addendum B4.
+ *
+ * `simFloor(floorN)` is the Phase 3 addition (memo addendum B4). It
+ * derives `streamPrng(rootSeed, "sim", floorN)` and records
+ * `"sim:" + floorN` into `__consumed`. The salt encoding
+ * `(name="sim", salts=[floorN])` is byte-distinct from `sim()`'s
+ * zero-salt pre-image (different total length, different tail bytes).
  */
 export type RunStreams = {
   mapgen(floor: number): PRNG;
   sim(): PRNG;
+  simFloor(floorN: number): PRNG;
   ui(): PRNG;
   readonly __consumed: ReadonlySet<string>;
 };
@@ -118,6 +125,13 @@ export function streamsForRun(rootSeed: Uint8Array): RunStreams {
     sim(): PRNG {
       consumed.add("sim");
       return streamPrng(rootSeed, "sim");
+    },
+    simFloor(floorN: number): PRNG {
+      if (!Number.isInteger(floorN) || floorN < 1 || floorN > 10) {
+        throw new Error(`simFloor: floorN must be 1..10 (got ${floorN})`);
+      }
+      consumed.add(`sim:${floorN}`);
+      return streamPrng(rootSeed, "sim", floorN);
     },
     ui(): PRNG {
       consumed.add("ui");

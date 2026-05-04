@@ -117,6 +117,39 @@ export default tseslint.config(
     },
   },
   {
+    // Stream-isolation contract for `src/sim/**`: sim may consume only
+    // `streams.simFloor(floorN)` (Phase 3 addendum B4 + B5). The
+    // member-access bans on `.mapgen` / `.ui` and the no-arg `.sim`
+    // mirror the existing mapgen pattern (see further down).
+    //
+    // Phase 3 sim must not import the public mapgen surface — it is a
+    // forbidden cross-layer edge — except for `src/sim/harness.ts`,
+    // which orchestrates the floor-entry block (`generateFloor` +
+    // `spawnFloorEntities`) per addendum B5. The harness ban is
+    // disabled below by a tighter scope.
+    files: ["src/sim/**/*.ts"],
+    ignores: ["src/sim/**/*.test.ts", "src/sim/harness.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["**/render/**", "**/input/**"],
+              message:
+                "sim/mapgen may not depend on render or input layers.",
+            },
+            {
+              group: ["**/mapgen/index", "**/mapgen/generate"],
+              message:
+                "sim modules other than src/sim/harness.ts must not import the mapgen public surface — Phase 3 addendum B5.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     files: ["src/render/**/*.ts"],
     rules: {
       "no-restricted-imports": [
@@ -204,6 +237,60 @@ export default tseslint.config(
             "MemberExpression[property.type='Identifier'][property.name='ui']",
           message:
             "mapgen may not access `.ui` on any object — stream-isolation contract (memo decision 7).",
+        },
+      ],
+    },
+  },
+  {
+    // Stream-isolation contract for `src/sim/**`: sim may consume only
+    // `streams.simFloor(floorN)` (Phase 3 frozen contract 8 + addendum
+    // B4). Member-access bans on `.mapgen`, `.ui`, and the no-arg
+    // `.sim` are enforced via `no-restricted-syntax`. The selectors
+    // also catch the `const { mapgen, ui } = streams` destructuring
+    // escape via `ObjectPattern > Property[key.name=...]` (addendum
+    // N3). `simFloor` is permitted — different identifier name.
+    files: ["src/sim/**/*.ts"],
+    ignores: ["src/sim/**/*.test.ts"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        ...FORBIDDEN_TIME,
+        ...SIM_UNORDERED,
+        {
+          selector:
+            "MemberExpression[property.type='Identifier'][property.name='mapgen']",
+          message:
+            "sim may not access `.mapgen` on any object — stream-isolation contract (memo decision 8).",
+        },
+        {
+          selector:
+            "MemberExpression[property.type='Identifier'][property.name='ui']",
+          message:
+            "sim may not access `.ui` on any object — stream-isolation contract (memo decision 8).",
+        },
+        {
+          selector:
+            "MemberExpression[property.type='Identifier'][property.name='sim']",
+          message:
+            "sim may not access `streams.sim()` (no-arg) — Phase 1 reserved accessor; use streams.simFloor(floorN) instead (memo decision 6 + addendum B4).",
+        },
+        {
+          selector:
+            "ObjectPattern > Property[key.type='Identifier'][key.name='mapgen']",
+          message:
+            "sim may not destructure `.mapgen` from any object — stream-isolation contract escape (addendum N3).",
+        },
+        {
+          selector:
+            "ObjectPattern > Property[key.type='Identifier'][key.name='ui']",
+          message:
+            "sim may not destructure `.ui` from any object — stream-isolation contract escape (addendum N3).",
+        },
+        {
+          selector:
+            "ObjectPattern > Property[key.type='Identifier'][key.name='sim']",
+          message:
+            "sim may not destructure no-arg `.sim` from any object — Phase 1 reserved accessor; use simFloor instead (addendum N3).",
         },
       ],
     },
