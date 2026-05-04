@@ -190,6 +190,39 @@ For each phase the doc lists: **Goal**, **Lead agent**, **Reviewers**, **Deliver
 
 ## Phase 4 — Procedural Atlas Generator (Planning Gate)
 
+> **Phase 4 split.** Per `artifacts/decision-memo-phase-4.md` decision 13
+> as amended by the addendum (resolutions B1–B8) and the attached
+> `architecture-red-team` review (see `artifacts/red-team-phase-4.md`),
+> Phase 4 is split into **Phase 4.0** (planning gate — decision memo +
+> red-team review + addendum resolving B1–B8), **Phase 4.A.1**
+> (drift-detection sweep — Phase 3.A.2 code-review carry-forwards +
+> `uniformIndex` relocation to `src/core/prng.ts` + `fdeflate`
+> devDependency exact-pinned + `.gitattributes` with `assets/atlas.png
+> binary` + LF normalization + `tests/build/rules-text.test.ts`
+> CRLF/BOM scan + `vite-plugin-atlas-binary-hash` scaffolding with
+> `EMPTY_SHA256` fallback + `deriveRulesetVersion` helper
+> defined-but-unused + `docs/ARCHITECTURE.md` update referencing Phase
+> 4 frozen contracts and the new `atlasSeedToBytes` domain anchor),
+> **Phase 4.A.2** (sandbox-verifiable atlas implementation:
+> primitives, recipes, registry, encoder, manifest, generator,
+> preview UI, ATLAS_DIGEST self-test, the call-site flip from
+> `PLACEHOLDER_RULESET_VERSION` to the real derivation, and
+> `assets/atlas.png` + `assets/atlas.json` — all in the same commit
+> per addendum B1), and **Phase 4.B** (live-deploy verification +
+> cross-OS PNG byte-equality matrix on the GitHub Actions
+> ubuntu-latest / macos-latest / windows-latest runners with
+> `fail-fast: false` and `node-version: 20.x` per addendum N14).
+> Phase 5 cannot begin until all four are approved. Phase 4.0
+> introduces no new acceptance criteria of its own beyond
+> planning-gate compliance; Phase 4.A.1 is the no-net-new-atlas
+> drift sweep (no placeholder retirement, no `__RULESET_VERSION__`
+> call-site flip — the helper is defined but unused, so master
+> between 4.A.1 and 4.A.2 continues to inject the Phase 1
+> placeholder); Phase 4.A.2 implements the atlas pipeline and
+> retires the placeholder in the same commit; Phase 4.B re-verifies
+> the diagnostic-page atlas-preview section on the live deployed
+> URL and asserts cross-OS PNG byte equality.
+
 **Goal.** Build the deterministic art pipeline. A standalone tool generates `assets/atlas.png` and `assets/atlas.json` from an atlas seed plus a recipe registry. The atlas binary hash is folded into `rulesetVersion`.
 
 **Lead agent.** `engine-builder` (generator), `frontend-builder` (preview UI)
@@ -208,12 +241,37 @@ For each phase the doc lists: **Goal**, **Lead agent**, **Reviewers**, **Deliver
 - Dev-mode preview page: render the current atlas and offer a slider for atlas-seed variants — deployed live so atlas tuning can happen against the deployed environment
 - Initial recipe coverage for floor tile, wall tile, door, one monster, one item, one NPC, player sprite — enough to validate the pipeline before Phase 5 needs the full content set
 
-**Acceptance criteria.**
-- `npm run gen-atlas` produces a byte-identical PNG on Linux, macOS, and Windows CI runners.
-- `assets/atlas.json` schema validates and references only IDs registered in `atlas-recipes.ts`.
-- `rulesetVersion` changes when (and only when) either the rules text or the atlas binary changes.
-- The seven initial recipes render at the target tile size with no transparency or palette bleed bugs.
-- Atlas binary size budget: under 256 KB for the v1 sprite count.
+**Acceptance criteria — Phase 4.0 (planning gate).**
+- `artifacts/decision-memo-phase-4.md` exists and was reviewed by `architecture-red-team` before any Phase 4 implementation code is written.
+- The red-team review at `artifacts/red-team-phase-4.md` exists; any blocking issues it raised are addressed via an in-memo addendum that supersedes the original prose.
+
+**Acceptance criteria — Phase 4.A.1 (drift-detection sweep).**
+- Phase 3.A.2 code-review carry-forwards (if any) landed.
+- `uniformIndex` relocated from `src/sim/run.ts` to `src/core/prng.ts`; focused unit tests cover termination, unbiased distribution, and `n=1` boundary; 100% line / branch / function coverage on `src/core/prng.ts` preserved.
+- `fdeflate` devDependency added to `package.json` (exact-pinned; no caret, no tilde); `package-lock.json` `integrity` hash recall flagged in the `architecture-red-team` checklist (addendum N1).
+- `.gitattributes` created at the repo root with the byte-exact content pinned in addendum B3 (includes `assets/atlas.png binary` and `* text=auto eol=lf`).
+- `tests/build/rules-text.test.ts` added; asserts every entry of `RULES_FILES` (addendum B2) has LF endings and no UTF-8 BOM, with the pinned error-message format.
+- `vite-plugin-atlas-binary-hash` scaffolding added in `scripts/vite-plugin-atlas-binary-hash.mjs`; the plugin is wired into both `vite.config.ts` and `vitest.config.ts`; with `assets/atlas.png` absent, the plugin injects `__ATLAS_BINARY_HASH__ = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"` (the SHA-256 of the empty byte string) and `__ATLAS_MISSING__ = true` via `JSON.stringify` (addendum B5, N17).
+- `deriveRulesetVersion(rulesText, atlasBinaryHash)` helper exported from `src/build-info.ts`; the helper is **defined but not yet called** at the `define`-block site (addendum B1). `vite.config.ts` and `vitest.config.ts` continue to inject `PLACEHOLDER_RULESET_VERSION` for `__RULESET_VERSION__` until Phase 4.A.2 lands the atlas binary.
+- `docs/ARCHITECTURE.md` updated to reference Phase 4 frozen contracts (recipe primitive set, recipe signature, recipe ID format, `streams.atlas(recipeId)` accessor with per-call `__consumed.size` += 1 invariant, atlas layout constants with the tile-grid resize rule from addendum B6, atlas-grid placement function, PNG encoder format with the all-16-byte `tRNS` chunk and per-pixel palette-bounds check from addendum N5/N6, color palette, atlas JSON manifest schema, `rulesetVersion` derivation per addendum B2, atlas-loader DEV- refusal + hash check with pinned error strings per addendum N7, `ATLAS_DIGEST` golden constant), the new `src/atlas/**` layer-table entry including `src/atlas/seed.ts` and `atlasSeedToBytes` per addendum B7, the new ESLint scope additions including `node:buffer` / `crypto` / `node:crypto` / `crypto.subtle` / `Buffer` per addendum B4 and bare-`fs`/`path` per addendum N10, and the deferred contracts.
+- `npm ci && npm run lint && npm run test && npm run build` all green inside the sandbox, with no net-new `src/atlas/**` recipe code.
+
+**Acceptance criteria — Phase 4.A.2 (sandbox-verifiable atlas implementation).**
+- `npm run gen-atlas` produces a byte-identical PNG on the sandbox host OS (cross-OS verification deferred to 4.B).
+- `assets/atlas.json` schema validates and references only IDs registered in `atlas-recipes.ts`; the manifest's `atlasBinaryHash` matches the actual `assets/atlas.png` SHA-256.
+- The `vite.config.ts` and `vitest.config.ts` `define`-block call sites are flipped from `PLACEHOLDER_RULESET_VERSION` to `deriveRulesetVersion(rulesText, atlasBinaryHash)` (per addendum B1, in the same commit that lands `assets/atlas.png`); the `__RULESET_VERSION__` injection uses `JSON.stringify` (per addendum N17). The atlas loader refuses any build whose `rulesetVersion === PLACEHOLDER_RULESET_VERSION` with the exact error string pinned in addendum N7.
+- The seven initial recipes render at the target tile size with no transparency or palette bleed bugs; encoder uses `Uint8Array` only (no `Buffer`) and `@noble/hashes/sha256` only (no `crypto.subtle` / `node:crypto`) per addendum B4; encoder asserts `pixels[i] < palette.colors.length` per pixel per addendum N5.
+- Atlas binary size budget: under 256 KB (Phase 4 actual: under 16 KB); JS bundle-report shows total `dist/`-gzipped under 75 KB (addendum N8).
+- `ATLAS_DIGEST` cross-runtime self-test passes in Node and in `vite preview`-served browsers; `atlas-stream-isolation` (rewritten per addendum B8 to use `__consumed.size === 1`), `atlas-manifest-parse`, and `atlas-encoder-cross-runtime` (added per addendum B4) self-tests pass.
+- All Phase 4 frozen contracts (final form per addendum) implemented and have at least one regression-failing test, including: the wrap-with-skip atlas-grid edge case (addendum N9), the non-canonical-input manifest round-trip (addendum N15), and the four preset-seed `expectedHash` golden assertions (addendum N12).
+- Layer-import lint rules added to `eslint.config.js`; fixture tests confirm the no-restricted-imports surface for `src/atlas/**` covers `node:buffer`, `crypto`, `node:crypto`, `crypto.subtle`, `Buffer`, and the bare-`fs`/`path` ban for `tools/**`.
+- `npm ci && npm run lint && npm run test && npm run build && npm run test:e2e` all green inside the sandbox.
+
+**Acceptance criteria — Phase 4.B (live-deploy + cross-OS verification).**
+- `npm run gen-atlas` produces a byte-identical PNG on `ubuntu-latest`, `macos-latest`, and `windows-latest` CI runners — asserted by a new `cross-os-atlas-equality` GitHub Actions job (matrix `fail-fast: false`, `node-version: 20.x` per addendum N14) whose aggregator step asserts pairwise SHA-256 equality of the generated `assets/atlas.png`.
+- The live GitHub Pages URL serves the updated diagnostic page with the in-browser atlas-preview section working.
+- The Phase 4.B Playwright job exercises the atlas-preview section on chromium / firefox / webkit: asserts `window.__ATLAS_PREVIEW__ === "ready"`, asserts `window.__ATLAS_PREVIEW_BUILD_HASH__ === window.__ATLAS_PREVIEW_LIVE_HASH__` on `ATLAS_SEED_DEFAULT`, and asserts each of the four preset seeds (`placeholder`, `variant-A`, `variant-B`, `variant-C`) regenerates to its pinned `expectedHash` per addendum N12.
+- The four preset-seed `expectedHash` values are computed during 4.A.2 on the `ubuntu-latest` shard of the cross-OS matrix and pasted into `src/atlas/preset-seeds.ts` literally before live deploy is approved (addendum N12).
 - The atlas preview page is live at the deployed URL.
 
 **Risks.**
