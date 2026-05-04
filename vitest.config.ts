@@ -21,16 +21,22 @@ export default defineConfig({
       include: [
         "src/atlas/**",
         "src/core/**",
+        "src/input/**",
         "src/mapgen/**",
         "src/registries/**",
+        "src/render/**",
         "src/sim/**",
+        "src/ui/**",
       ],
       exclude: [
         "src/atlas/**/*.test.ts",
         "src/core/**/*.test.ts",
+        "src/input/**/*.test.ts",
         "src/mapgen/**/*.test.ts",
         "src/registries/**/*.test.ts",
+        "src/render/**/*.test.ts",
         "src/sim/**/*.test.ts",
+        "src/ui/**/*.test.ts",
         // Pure-type declaration files: no executable code, so v8
         // reports as 0/0 which fails the 100% threshold.
         "src/mapgen/types.ts",
@@ -72,6 +78,31 @@ export default defineConfig({
         // load-bearing assertions. Branch threshold matches the
         // Phase 2 mapgen/registries precedent.
         "src/sim/**": {
+          lines: 95,
+          statements: 95,
+          functions: 100,
+          branches: 85,
+        },
+        // Phase 5.A.2 render/input/ui coverage. The renderer's
+        // defensive paths (canvas-context-unavailable, manifest
+        // missing slot) and the keyboard's no-window fallback are
+        // exercised; Phase 5 frozen contract permits ≥ 95% as
+        // documented in the operating-rules section of the phase
+        // prompt (the documented Phase 5 deviation: "defensive paths
+        // can be uncovered").
+        "src/render/**": {
+          lines: 95,
+          statements: 95,
+          functions: 100,
+          branches: 85,
+        },
+        "src/input/**": {
+          lines: 95,
+          statements: 95,
+          functions: 100,
+          branches: 85,
+        },
+        "src/ui/**": {
           lines: 95,
           statements: 95,
           functions: 100,

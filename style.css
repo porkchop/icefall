@@ -212,3 +212,103 @@ body {
   margin: 0;
   border: 1px solid rgba(160, 175, 200, 0.15);
 }
+
+/* Phase 5.A.2 — playable game UI. */
+
+#app {
+  /* Widen the layout so the game canvas (60 tiles × 16 px = 960 px on
+     floors 1..9) fits without horizontal scrolling. The diagnostic
+     content stays readable at this width because the existing prose
+     wraps naturally. */
+  max-width: 1024px;
+}
+
+.game {
+  margin-top: 16px;
+  margin-bottom: 32px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(160, 175, 200, 0.15);
+}
+
+.game h2 {
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--accent);
+  margin: 0 0 8px;
+}
+
+.game-help {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 0 0 12px;
+}
+
+.game-error {
+  color: var(--red);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: pre-wrap;
+  margin-bottom: 8px;
+}
+
+.game-canvas {
+  background: #000;
+  border: 1px solid rgba(199, 146, 234, 0.4);
+  display: block;
+  /* Pixel-perfect scaling — the renderer paints at native tile size
+     and the canvas is sized via the canvas.width attribute, which
+     defines the bitmap dimensions. The `image-rendering` rule keeps
+     the up-scale crisp on high-DPI displays. */
+  image-rendering: pixelated;
+  max-width: 100%;
+  height: auto;
+}
+
+.game-hud {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.45);
+  border-radius: 3px;
+  border: 1px solid rgba(160, 175, 200, 0.15);
+  margin-bottom: 12px;
+  font-size: 12px;
+  font-family: inherit;
+}
+
+.hud-field {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.hud-label {
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 10px;
+}
+
+.hud-value {
+  color: var(--fg);
+  font-weight: 600;
+}
+
+#diagnostics {
+  margin-top: 24px;
+  padding: 12px;
+  border: 1px solid rgba(160, 175, 200, 0.15);
+  border-radius: 3px;
+  background: rgba(160, 175, 200, 0.03);
+}
+
+#diagnostics > summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  user-select: none;
+}

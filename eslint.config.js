@@ -150,20 +150,164 @@ export default tseslint.config(
     },
   },
   {
+    // Phase 5.A.2 lint-rule body for `src/render/**`. The rows are
+    // documented in `docs/ARCHITECTURE.md`'s "Phase 5 frozen contracts
+    // (renderer + input + ui)" section. Renderer is a read-only sink
+    // on sim state — banning every sim write path keeps the contract
+    // type-checkable AND lint-checkable. The Phase 5 layer-table also
+    // forbids `src/mapgen/generate.ts` write paths and `src/main.ts`,
+    // and forbids mutating any imported state (the runtime
+    // architectural test in tests/render/render-readonly.test.ts
+    // pins the latter).
     files: ["src/render/**/*.ts"],
+    ignores: ["src/render/**/*.test.ts"],
     rules: {
       "no-restricted-imports": [
         "error",
         {
           patterns: [
             {
-              group: ["**/core/streams", "**/sim/combat"],
+              group: [
+                "**/core/streams",
+                "**/sim/combat",
+                "**/sim/turn",
+                "**/sim/run",
+                "**/sim/harness",
+                "**/sim/ai",
+                "**/mapgen/generate",
+                "**/input/**",
+                "**/main",
+              ],
               message:
-                "render must not import core/streams or sim/combat — it is read-only over sim state.",
+                "render is a read-only sink on sim state — no sim/mapgen write paths, no input layer, no main orchestrator (Phase 5 frozen contracts).",
             },
           ],
         },
       ],
+      "no-restricted-syntax": ["error", ...FORBIDDEN_TIME],
+      "no-restricted-globals": [
+        "error",
+        { name: "Date", message: "Date is banned in deterministic code." },
+        {
+          name: "performance",
+          message: "performance is banned in deterministic code.",
+        },
+      ],
+    },
+  },
+  {
+    // Phase 5.A.2 — extend the determinism plugin's float-arithmetic
+    // ban to `src/render/**`. The renderer handles integer pixel
+    // coordinates only; floor dimensions × TILE_SIZE produces integer
+    // canvas dimensions. Float arithmetic creeping in here would be a
+    // determinism regression even though canvas blits are not on the
+    // state-hash chain.
+    files: ["src/render/**/*.ts"],
+    ignores: ["src/render/**/*.test.ts"],
+    plugins: { determinism: determinismPlugin },
+    rules: {
+      "determinism/no-float-arithmetic": "error",
+    },
+  },
+  {
+    // Phase 5.A.2 lint-rule body for `src/input/**`. The input layer
+    // is a peer of `src/render/**` and `src/ui/**` with the same
+    // write-path bans. The Phase 5 layer table forbids
+    // `src/render/**`, `src/mapgen/**`, and `src/main.ts` imports;
+    // ARCHITECTURE.md also calls out the single-orchestrator rule
+    // (only `src/main.ts` wires input → sim → render → ui).
+    files: ["src/input/**/*.ts"],
+    ignores: ["src/input/**/*.test.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: [
+                "**/core/streams",
+                "**/sim/combat",
+                "**/sim/turn",
+                "**/sim/run",
+                "**/sim/harness",
+                "**/sim/ai",
+                "**/mapgen/**",
+                "**/render/**",
+                "**/main",
+              ],
+              message:
+                "input must not import sim/mapgen write paths, render, or main — only `src/main.ts` wires input → sim → render → ui (Phase 5 frozen contracts).",
+            },
+          ],
+        },
+      ],
+      "no-restricted-syntax": ["error", ...FORBIDDEN_TIME],
+      "no-restricted-globals": [
+        "error",
+        { name: "Date", message: "Date is banned in deterministic code." },
+        {
+          name: "performance",
+          message: "performance is banned in deterministic code.",
+        },
+      ],
+    },
+  },
+  {
+    files: ["src/input/**/*.ts"],
+    ignores: ["src/input/**/*.test.ts"],
+    plugins: { determinism: determinismPlugin },
+    rules: {
+      "determinism/no-float-arithmetic": "error",
+    },
+  },
+  {
+    // Phase 5.A.2 lint-rule body for `src/ui/**`. The HUD is a
+    // read-only sink on RunState; same write-path bans as renderer.
+    // ARCHITECTURE.md row: "src/ui/" Imports allowed: src/core/
+    // (read-only types + fingerprint), src/sim/types, src/build-info.ts.
+    files: ["src/ui/**/*.ts"],
+    ignores: ["src/ui/**/*.test.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: [
+                "**/core/streams",
+                "**/sim/combat",
+                "**/sim/turn",
+                "**/sim/run",
+                "**/sim/harness",
+                "**/sim/ai",
+                "**/mapgen/**",
+                "**/render/**",
+                "**/input/**",
+                "**/main",
+              ],
+              message:
+                "ui must not import sim/mapgen write paths, render, input, or main — only `src/main.ts` wires the four layers together (Phase 5 frozen contracts).",
+            },
+          ],
+        },
+      ],
+      "no-restricted-syntax": ["error", ...FORBIDDEN_TIME],
+      "no-restricted-globals": [
+        "error",
+        { name: "Date", message: "Date is banned in deterministic code." },
+        {
+          name: "performance",
+          message: "performance is banned in deterministic code.",
+        },
+      ],
+    },
+  },
+  {
+    files: ["src/ui/**/*.ts"],
+    ignores: ["src/ui/**/*.test.ts"],
+    plugins: { determinism: determinismPlugin },
+    rules: {
+      "determinism/no-float-arithmetic": "error",
     },
   },
   {

@@ -5,7 +5,9 @@ import { streamsForRun } from "./core/streams";
 import { seedToBytes } from "./core/seed";
 import { sha256Hex } from "./core/hash";
 import { generateFloor, renderAscii } from "./mapgen/index";
-import { runScripted } from "./sim/harness";
+import { runScripted, buildInitialRunState } from "./sim/harness";
+import { applyFloorEntry, spawnFloorEntities } from "./sim/run";
+import { tick } from "./sim/turn";
 import {
   SELF_TEST_INPUTS,
   SELF_TEST_LOG_100,
@@ -14,6 +16,12 @@ import { generateAtlas } from "./atlas/generate";
 import { ATLAS_PRESET_SEEDS } from "./atlas/preset-seeds";
 import { ATLAS_SEED_DEFAULT } from "./atlas/params";
 import { validateSeedString } from "./atlas/seed";
+import { loadAtlas, type LoadedAtlas } from "./atlas/loader";
+import { drawScene, type RenderTarget, type AtlasImage } from "./render/canvas";
+import { startKeyboard, DEFAULT_KEY_BINDINGS } from "./input/keyboard";
+import { renderHud } from "./ui/hud";
+import type { RunState } from "./sim/types";
+import type { Action } from "./core/encode";
 
 declare global {
   interface Window {
@@ -29,6 +37,14 @@ declare global {
     __ATLAS_PREVIEW_BUILD_HASH__: string | undefined;
     __ATLAS_PREVIEW_LIVE_HASH__: string | undefined;
     __ATLAS_PREVIEW_SEED__: string | undefined;
+    // Phase 5.A.2 — playable-game flags read by the cross-runtime
+    // Playwright suite. `__GAME_READY__ === "ready"` after first paint.
+    __GAME_READY__: "ready" | "error" | undefined;
+    __GAME_ERROR__: string | undefined;
+    __GAME_STATE_HASH__: string | undefined;
+    __GAME_FLOOR__: number | undefined;
+    __GAME_HP__: number | undefined;
+    __GAME_OUTCOME__: "running" | "dead" | "won" | undefined;
   }
 }
 
@@ -68,21 +84,25 @@ function el<K extends keyof HTMLElementTagNameMap>(
   return e;
 }
 
-function render(): void {
-  const root = document.getElementById("app");
-  if (!root) return;
-  root.innerHTML = "";
+/* ------------------------------------------------------------------ */
+/* Diagnostic surface (preserved from Phases 1.A → 4.A.2).            */
+/*                                                                    */
+/* This block builds the existing diagnostic page as a <details>      */
+/* element with the `open` attribute set so the e2e suite (which      */
+/* inspects DOM ids and `window.__*__` flags) keeps passing without   */
+/* clicking anything. All previous DOM ids and window flags are       */
+/* preserved verbatim per the Phase 5 frozen contract                 */
+/* "Diagnostic surface preserved" rule.                               */
+/* ------------------------------------------------------------------ */
+function renderDiagnostic(host: HTMLElement): void {
+  const details = document.createElement("details");
+  details.id = "diagnostics";
+  details.open = true;
+  const summary = document.createElement("summary");
+  summary.textContent = "Diagnostics (self-test, build info, floor preview, scripted playthrough, atlas preview)";
+  details.appendChild(summary);
 
-  const header = el("header", "header");
-  header.appendChild(el("h1", "title", "ICEFALL — diagnostic"));
-  header.appendChild(
-    el(
-      "p",
-      "subtitle",
-      "Phase 1: deterministic core engine + public deploy pipeline.",
-    ),
-  );
-  root.appendChild(header);
+  const root = details;
 
   const result = runSelfTests();
   window.__SELF_TEST_DETAILS__ = result;
@@ -140,9 +160,10 @@ function render(): void {
   const note = el(
     "p",
     "warn",
-    "This is the Phase 1 diagnostic page. The placeholder ruleset means " +
-      "any fingerprint shown here is tagged DEV- and is not shareable. " +
-      "Phase 4 wires in the real ruleset.",
+    "Phase 5 diagnostic surface — preserved alongside the playable game UI " +
+      "above so the cross-runtime determinism assertions from Phases 1.B → 4.B " +
+      "keep passing. The placeholder ruleset has been retired in Phase 4.A.2; " +
+      "the fingerprint shown here is a real (non-`DEV-`) value.",
   );
   meta.appendChild(note);
   root.appendChild(meta);
@@ -222,11 +243,7 @@ function render(): void {
 
   root.appendChild(previewSection);
 
-  // Phase 3.A.2: scripted playthrough section. Exercises the headless
-  // sim harness against the same SELF_TEST_INPUTS / SELF_TEST_LOG_100
-  // pinned by the SIM_DIGEST self-test. Cross-runtime Playwright reads
-  // window.__SIM_FINAL_STATE_HASH__ + __SIM_OUTCOME__ to verify
-  // browser-side determinism end-to-end.
+  // Phase 3.A.2: scripted playthrough section.
   const simSection = el("section", "scripted-sim");
   simSection.id = "sim-scripted";
   simSection.appendChild(el("h2", undefined, "Scripted playthrough"));
@@ -273,17 +290,11 @@ function render(): void {
     runSim();
   });
 
-  // Run once on initial render so the page is in its final state for
-  // Playwright assertions without requiring a click.
   runSim();
 
   root.appendChild(simSection);
 
-  // Phase 4.A.2: atlas preview UI (memo decision 9 + addendum B4 N12).
-  // Side-by-side comparison: build-time atlas (left) vs live-regen
-  // atlas (right). Cross-runtime determinism is asserted by Playwright
-  // via window.__ATLAS_PREVIEW_BUILD_HASH__ === __ATLAS_PREVIEW_LIVE_HASH__
-  // when the seed is ATLAS_SEED_DEFAULT.
+  // Phase 4.A.2: atlas preview UI.
   const atlasSection = el("section", "atlas-preview");
   atlasSection.id = "atlas-preview";
   atlasSection.appendChild(el("h2", undefined, "Atlas preview"));
@@ -425,8 +436,6 @@ function render(): void {
     regenerateLive();
   });
 
-  // Initial render. If the build-time atlas is missing, surface that
-  // and skip the build-side fetch (addendum B5).
   if (atlasMissing) {
     setAtlasError(
       "atlas-preview: assets/atlas.png is missing — run 'npm run gen-atlas' first",
@@ -443,14 +452,11 @@ function render(): void {
         return drawPngToCanvas(bytes, buildCanvas);
       })
       .then(() => {
-        // Live side runs synchronously — drives __ATLAS_PREVIEW_LIVE_HASH__.
         regenerateLive();
         window.__ATLAS_PREVIEW__ = "ready";
       })
       .catch((e) => {
         setAtlasError(`atlas-preview: build atlas fetch failed: ${e.message}`);
-        // Still mark as ready so e2e doesn't time out; the error div
-        // is the diagnostic surface.
         window.__ATLAS_PREVIEW_BUILD_HASH__ = atlasBinaryHash;
         regenerateLive();
         window.__ATLAS_PREVIEW__ = "ready";
@@ -458,6 +464,188 @@ function render(): void {
   }
 
   root.appendChild(atlasSection);
+
+  host.appendChild(details);
 }
 
-render();
+/* ------------------------------------------------------------------ */
+/* Playable game (Phase 5.A.2 — new).                                 */
+/*                                                                    */
+/* `startGame` is the single orchestrator wiring input → sim → render */
+/* → ui per the Phase 5 frozen contract. The atlas is loaded once at  */
+/* startup; the loader's PLACEHOLDER_RULESET_VERSION / ATLAS_MISSING / */
+/* hash-mismatch refusal paths bubble exceptions to the top-level      */
+/* error display.                                                     */
+/* ------------------------------------------------------------------ */
+async function startGame(host: HTMLElement): Promise<void> {
+  const section = el("section", "game");
+  section.id = "game";
+  section.appendChild(el("h2", undefined, "ICEFALL"));
+  section.appendChild(
+    el(
+      "p",
+      "game-help",
+      "Arrow keys / WASD: move (8 directions via Q/E/Z/C). Space or '.': wait. Shift+'.': descend stairs.",
+    ),
+  );
+
+  const errorDiv = el("div", "game-error");
+  errorDiv.id = "game-error";
+  section.appendChild(errorDiv);
+
+  const hudHost = el("div", "game-hud");
+  hudHost.id = "game-hud";
+  section.appendChild(hudHost);
+
+  const canvas = document.createElement("canvas");
+  canvas.id = "game-canvas";
+  canvas.className = "game-canvas";
+  // Make the canvas focusable so keystrokes are routed to it; the
+  // window-level keyboard listener catches everything anyway, but this
+  // gives a visible focus ring for accessibility-by-default.
+  canvas.tabIndex = 0;
+  section.appendChild(canvas);
+
+  host.appendChild(section);
+
+  // 1. Load the atlas. The loader refuses PLACEHOLDER_RULESET_VERSION
+  //    and __ATLAS_MISSING__ builds with the pinned messages from
+  //    `src/atlas/loader.ts` (Phase 4 addendum N7).
+  let loaded: LoadedAtlas;
+  try {
+    loaded = await loadAtlas(import.meta.env.BASE_URL + "assets");
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    errorDiv.textContent = msg;
+    window.__GAME_READY__ = "error";
+    window.__GAME_ERROR__ = msg;
+    return;
+  }
+
+  // 2. Decode the PNG bytes into an HTMLImageElement that
+  //    `ctx.drawImage` accepts. The browser's PNG decoder is the same
+  //    surface as the atlas-preview UI; no Node-side path needed.
+  let atlasImage: AtlasImage;
+  try {
+    atlasImage = await decodeAtlasImage(loaded.png);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    errorDiv.textContent = `game: atlas decode failed: ${msg}`;
+    window.__GAME_READY__ = "error";
+    window.__GAME_ERROR__ = msg;
+    return;
+  }
+
+  // 3. Build the initial RunState from the URL-hash seed (or the
+  //    default). The hash-state already exists on the diagnostic page;
+  //    the playable game shares it so a deep link works for both.
+  const hashState = readHashState();
+  const inputs = {
+    commitHash,
+    rulesetVersion,
+    seed: hashState.seed,
+    modIds: [] as readonly string[],
+  };
+  const streams = streamsForRun(seedToBytes(hashState.seed));
+  let state: RunState = buildInitialRunState(inputs, streams);
+
+  const target: RenderTarget = {
+    canvas,
+    atlas: loaded,
+    atlasImage,
+  };
+
+  // 4. Render once before listening for input so the canvas is
+  //    populated and the HUD reflects the initial state.
+  function rerender(): void {
+    drawScene(target, state);
+    renderHud(hudHost, state);
+    window.__GAME_STATE_HASH__ = sha256Hex(state.stateHash);
+    window.__GAME_FLOOR__ = state.floorN;
+    window.__GAME_HP__ = state.player.hp;
+    window.__GAME_OUTCOME__ = state.outcome;
+  }
+  rerender();
+
+  // 5. Wire keyboard → sim. On each Action, advance the sim, run the
+  //    floor-entry block if `__pendingFloorEntry` is set (mirrors the
+  //    harness loop), then re-render. On terminal outcome the
+  //    keyboard handler short-circuits.
+  function onAction(action: Action): void {
+    if (state.outcome !== "running") return;
+
+    if (state.__pendingFloorEntry) {
+      const newFloor = generateFloor(state.floorN, streams);
+      const newFloorState = spawnFloorEntities(state.floorN, newFloor, streams);
+      state = applyFloorEntry(state, newFloor, newFloorState);
+    }
+
+    state = tick(state, action);
+    rerender();
+  }
+  startKeyboard(
+    {
+      bindings: DEFAULT_KEY_BINDINGS,
+      target: window,
+    },
+    onAction,
+  );
+
+  window.__GAME_READY__ = "ready";
+}
+
+/**
+ * Decode the atlas PNG bytes into an `HTMLImageElement` via a
+ * Blob + ObjectURL round-trip. The same approach is used by the
+ * atlas-preview's `drawPngToCanvas` (the canvas there uses the same
+ * decoded image). Returns the loaded image, which `ctx.drawImage`
+ * accepts via the `CanvasImageSource` union.
+ */
+function decodeAtlasImage(png: Uint8Array): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const blob = new Blob([png], { type: "image/png" });
+    const url = URL.createObjectURL(blob);
+    const img = new Image();
+    img.onload = () => {
+      // Don't revoke the URL here — the image element's `src` keeps
+      // the browser's blob alive, but revoking it on Webkit causes a
+      // race where subsequent drawImage calls see an empty image. The
+      // URL is short-lived (one per page load); leaking is harmless.
+      resolve(img);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("decodeAtlasImage: <img> decode failed"));
+    };
+    img.src = url;
+  });
+}
+
+/* ------------------------------------------------------------------ */
+/* Bootstrap.                                                         */
+/* ------------------------------------------------------------------ */
+async function bootstrap(): Promise<void> {
+  const root = document.getElementById("app");
+  if (!root) return;
+  root.innerHTML = "";
+
+  const header = el("header", "header");
+  header.appendChild(el("h1", "title", "ICEFALL"));
+  header.appendChild(
+    el(
+      "p",
+      "subtitle",
+      "Phase 5: deterministic core engine + playable game UI.",
+    ),
+  );
+  root.appendChild(header);
+
+  // Render the playable game first so the canvas is the visual
+  // priority. The diagnostic surface follows below.
+  await startGame(root);
+
+  // Diagnostic surface (preserved from Phases 1.A → 4.A.2).
+  renderDiagnostic(root);
+}
+
+bootstrap();

@@ -222,3 +222,92 @@ for (const preset of PRESET_HASHES) {
     expect(liveHash).toBe(preset.expectedHash);
   });
 }
+
+// Phase 5.A.2 playable-game UI tests. The renderer + input + HUD are
+// wired into `src/main.ts`'s startup path; the diagnostic surface is
+// preserved beneath in a `<details id="diagnostics" open>` block so
+// the existing 14 tests above keep passing without modification.
+
+test("playable game section is visible and __GAME_READY__ === 'ready'", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.waitForFunction(
+    () => window.__GAME_READY__ === "ready" || window.__GAME_READY__ === "error",
+    null,
+    { timeout: 10_000 },
+  );
+  await expect(page.locator("#game")).toBeVisible();
+  await expect(page.locator("#game-canvas")).toBeVisible();
+  await expect(page.locator("#game-hud")).toBeVisible();
+  const ready = await page.evaluate(() => window.__GAME_READY__);
+  expect(ready).toBe("ready");
+});
+
+test("game HUD reflects the initial RunState (HP, floor, outcome)", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.waitForFunction(
+    () => window.__GAME_READY__ === "ready",
+    null,
+    { timeout: 10_000 },
+  );
+  const hp = await page.evaluate(() => window.__GAME_HP__);
+  const floor = await page.evaluate(() => window.__GAME_FLOOR__);
+  const outcome = await page.evaluate(() => window.__GAME_OUTCOME__);
+  expect(hp).toBe(30); // PLAYER_INITIAL_HP_MAX
+  expect(floor).toBe(1);
+  expect(outcome).toBe("running");
+  // Visible HUD elements.
+  await expect(
+    page.locator("[data-hud-field='hp']"),
+  ).toContainText("30/30");
+  await expect(
+    page.locator("[data-hud-field='floor']"),
+  ).toContainText("1");
+});
+
+test("five movement keys advance the sim state hash", async ({ page }) => {
+  await page.goto("/");
+  await page.waitForFunction(
+    () => window.__GAME_READY__ === "ready",
+    null,
+    { timeout: 10_000 },
+  );
+  const initialHash = await page.evaluate(() => window.__GAME_STATE_HASH__);
+  expect(typeof initialHash).toBe("string");
+  expect(initialHash!.length).toBe(64);
+
+  // Synthesize five movement keypresses. We use ArrowDown so the
+  // direction is well-defined regardless of where the entrance is on
+  // floor 1; each press either succeeds (state hash advances) or is
+  // blocked by a wall (state hash still advances because tick() is
+  // still called and the state hash is `sha256(prev || encodeAction)`
+  // — the hash advances on every player action regardless of whether
+  // the player position changed).
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("ArrowDown");
+
+  await page.waitForTimeout(50);
+  const after = await page.evaluate(() => window.__GAME_STATE_HASH__);
+  expect(after).not.toBe(initialHash);
+  expect(after!.length).toBe(64);
+});
+
+test("diagnostic surface is preserved in a <details> wrapper", async ({
+  page,
+}) => {
+  await page.goto("/");
+  // The diagnostics section is a peer of #game and stays expanded by
+  // default so the existing diagnostic e2e tests still find their
+  // selectors.
+  await expect(page.locator("#diagnostics")).toBeVisible();
+  await expect(page.locator("#self-test-banner")).toBeVisible();
+  await expect(page.locator("#floor-preview")).toBeVisible();
+  await expect(page.locator("#sim-scripted")).toBeVisible();
+  await expect(page.locator("#atlas-preview")).toBeVisible();
+});
