@@ -89,7 +89,7 @@ export const SIM_DIGEST =
  * `architecture-red-team` review.
  */
 export const ATLAS_DIGEST =
-  "35069834850591c6b72c1946629129a04ed2f1b9446de5ccdd75b28fe6005a47";
+  "a3f7e3caa857b5edbd1728a874b858484e58150658277a54dc9506f0489edb08";
 
 /**
  * Hardcoded SHA-256 of the encoded PNG for a 16×16 single-color

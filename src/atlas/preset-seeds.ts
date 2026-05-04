@@ -26,24 +26,24 @@ export const ATLAS_PRESET_SEEDS: readonly AtlasPresetSeed[] = Object.freeze([
     id: "placeholder",
     seed: ATLAS_SEED_DEFAULT,
     expectedHash:
-      "35069834850591c6b72c1946629129a04ed2f1b9446de5ccdd75b28fe6005a47",
+      "a3f7e3caa857b5edbd1728a874b858484e58150658277a54dc9506f0489edb08",
   }),
   Object.freeze({
     id: "variant-A",
     seed: "icefall-atlas-variant-A",
     expectedHash:
-      "c3dc8c8b50592e2c7383d2cafd02d2932afd27a1f898bea9aadc82a5299c7396",
+      "5fea9dee7b220a5689eefaeecff0d44b302e1f2fa5554d499fce57a9e979dcd8",
   }),
   Object.freeze({
     id: "variant-B",
     seed: "icefall-atlas-variant-B",
     expectedHash:
-      "405713dfbbbc9b57e2ee3e08b47abe6436d3199ceb2613b602829532bbeef0f8",
+      "61f8b72f24c98bb1e65b340e5c5b5dd7a3f0cd6f7801644a15fa701d1c5d2056",
   }),
   Object.freeze({
     id: "variant-C",
     seed: "icefall-atlas-variant-C",
     expectedHash:
-      "f77e1a28d6cfe0452ab790503996e787f46a240b2818d8adc1dedfadadbef01c",
+      "51ac6293c0953047c3eb27aece3275cd6c17537fa68a74f75d480821c772893f",
   }),
 ]);

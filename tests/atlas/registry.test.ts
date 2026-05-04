@@ -18,8 +18,8 @@ import type { RecipeContext } from "../../src/atlas/recipes/types";
  */
 
 describe("ATLAS_RECIPES — shape", () => {
-  it("ships 23 entries — Phase 4's 7 + Phase 6.A.2's 16 item additions", () => {
-    expect(ATLAS_RECIPES.length).toBe(23);
+  it("ships 26 entries — Phase 4's 7 + Phase 6.A.2's 16 item additions + Phase 7.A.1's 3 carry-forward item recipes (stim-patch + trauma-pack + cyberdeck-mod-1)", () => {
+    expect(ATLAS_RECIPES.length).toBe(26);
   });
 
   it("every entry has a regex-conforming recipe ID", () => {

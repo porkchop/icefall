@@ -49,6 +49,14 @@ import { recipeItemWeaponMonoblade } from "../atlas/recipes/item-weapon-monoblad
 import { recipeItemWeaponPistol } from "../atlas/recipes/item-weapon-pistol";
 import { recipeItemWeaponShotgun } from "../atlas/recipes/item-weapon-shotgun";
 import { recipeItemWeaponSmg } from "../atlas/recipes/item-weapon-smg";
+// Phase 7.A.1 additions (positions 23+ in the array — appended). Closes
+// Phase 6.A.2 code-review nit N4: the 3 Phase 3 items that previously
+// lacked atlas recipes (would have produced a renderer-throw if ever
+// floor-spawned). Coordinate-stable for all earlier sprites per
+// addendum 3a.
+import { recipeItemStimPatch } from "../atlas/recipes/item-stim-patch";
+import { recipeItemTraumaPack } from "../atlas/recipes/item-trauma-pack";
+import { recipeItemCyberdeckMod1 } from "../atlas/recipes/item-cyberdeck-mod-1";
 
 export type AtlasSlotId =
   // Phase 4 frozen seven (do NOT reorder).
@@ -77,7 +85,11 @@ export type AtlasSlotId =
   | "item.weapon.monoblade"
   | "item.weapon.pistol"
   | "item.weapon.shotgun"
-  | "item.weapon.smg";
+  | "item.weapon.smg"
+  // Phase 7.A.1 additions (close Phase 6.A.2 N4 carry-forward).
+  | "item.stim-patch"
+  | "item.trauma-pack"
+  | "item.cyberdeck-mod-1";
 
 export type Recipe = (
   prng: PRNG,
@@ -269,6 +281,35 @@ export const ATLAS_RECIPES: readonly AtlasRecipeEntry[] = Object.freeze([
     tilesWide: 1,
     tilesHigh: 1,
     slot: "item.weapon.smg",
+  }),
+  // ----- Phase 7.A.1 — close Phase 6.A.2 N4 carry-forward -----
+  // Order within the Phase 7.A.1 block is registry-declaration order
+  // (matches the order Phase 3's `src/registries/items.ts` listed these
+  // 3 entries when the recipes were originally absent: stim-patch
+  // before trauma-pack before cyberdeck-mod-1). The placer is
+  // declaration-order, not alphabetical-by-recipe-id, per memo
+  // decision 3a — bumping this order would shift `(atlasX, atlasY)`
+  // for the 3 new sprites and is therefore frozen at landing.
+  Object.freeze({
+    id: "atlas-recipe.cyberpunk.item.stim-patch",
+    recipe: recipeItemStimPatch,
+    tilesWide: 1,
+    tilesHigh: 1,
+    slot: "item.stim-patch",
+  }),
+  Object.freeze({
+    id: "atlas-recipe.cyberpunk.item.trauma-pack",
+    recipe: recipeItemTraumaPack,
+    tilesWide: 1,
+    tilesHigh: 1,
+    slot: "item.trauma-pack",
+  }),
+  Object.freeze({
+    id: "atlas-recipe.cyberpunk.item.cyberdeck-mod-1",
+    recipe: recipeItemCyberdeckMod1,
+    tilesWide: 1,
+    tilesHigh: 1,
+    slot: "item.cyberdeck-mod-1",
   }),
 ]);
 

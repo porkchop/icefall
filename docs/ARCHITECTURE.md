@@ -953,6 +953,118 @@ exercise this further when fingerprint-based replay lands.
 - Item descriptions / flavor text in a `theme` registry (Phase 9
   polish).
 
+### Phase 7 frozen contracts (NPCs + shops + boss)
+
+These are the contract additions Phase 7 locks in; the canonical
+reference is the Phase 7 callout block in `docs/PHASES.md`. Phase 7
+is **not** a planning-gate phase per the policy at the top of
+`docs/PHASES.md`, so there is no `decision-memo-phase-7.md`; the
+architectural seams are pinned here and refined as 7.A.2's
+implementation lands. Phase 7.A.1 (drift-detection sweep) ships
+this section ahead of 7.A.2's NPC + shop + boss-FSM content so the
+boundaries are locked before code is written.
+
+**NPC data shape.** `FloorState` gains a readonly `npcs` collection
+sorted deterministically (by `kind` ASC, tie-break by `(y, x)`).
+NPCs are distinct from `Monster` entities: they do not participate
+in BFS combat AI; they have no `hp`/`atk`/`def`; they are
+interaction targets for the new shop action vocabulary.
+
+```ts
+type NpcKindId =
+  | "npc.ripperdoc"          // existing Phase 4 atlas slot
+  | "npc.fixer"              // new in Phase 7
+  | "npc.info-broker";       // new in Phase 7
+
+type FloorNpc = {
+  readonly kind: NpcKindId;
+  readonly pos: Point;
+  readonly inventory: readonly InventoryEntry[];   // shop stock
+};
+```
+
+The exact field set (e.g., whether NPCs carry per-instance dialog
+state or pricing tables) is resolved during 7.A.2's strategy-planner
+pass; this section is amended at landing time if needed.
+
+**Shop interaction action vocabulary.** Phase 7 adds 2-4 additive
+`Action.type` strings (final count pinned during 7.A.2). Working
+sketch: `talk` (open dialog with the NPC at the player's adjacent
+cell, `target` = NPC kind ordinal), `buy` (`item` = ItemKindId of
+the offered item; `target` = NPC kind ordinal), `sell` (`item` =
+ItemKindId from player inventory; `target` = NPC kind ordinal).
+All reuse existing TAG_TARGET=0x10 + TAG_ITEM=0x20 wire tags — no
+ACTION_VERSION bump per the Phase 1 frozen "additive vocabulary"
+rule. Adding new types is additive; removing or renaming is a
+`rulesetVersion` bump.
+
+**Deterministic shop-transaction resolution.** Stock generation,
+price computation, and any variance roll consume the existing
+`rollBytes` subhash with new domain anchors:
+
+| domain                | purpose                                     |
+|-----------------------|---------------------------------------------|
+| `shop:stock`          | which items an NPC offers (rolled at floor-spawn time, not per-action) |
+| `shop:price`          | per-item price variance from the registry base |
+
+Domains are 7-bit ASCII length 1..31 bytes. **No `Math.random` for
+stock generation.** No floats. Stock is rolled when the NPC spawns
+on a floor (per-floor stream `streams.simFloor(floorN)`), not at
+each `talk` action — keeps the per-action `__consumed` empty
+invariant intact (Phase 3 frozen contract item 9).
+
+**Boss FSM contract.** The floor-10 boss (`monster.boss.black-ice-v0`,
+already in the monster registry) gains a multi-phase deterministic
+state machine. Phases are tracked via an extension to
+`Monster.aiState` (Phase 3 union currently `"idle" | "chasing"`):
+add `"boss-phase-1" | "boss-phase-2" | "boss-phase-3"` (final phase
+count pinned during 7.A.2). Transitions are triggered by HP
+thresholds (e.g., 66% → phase 2, 33% → phase 3); per-phase atk/def
+scaling is pinned in the registry. The FSM is **deterministic** —
+no random transitions; transitions advance only via player
+attack actions that drop HP below thresholds.
+
+**Boss-room spawn override on floor 10.** The Phase 2 `bossArena`
+slot already exists in the floor JSON; Phase 7 wires the actual
+boss spawn at `spawnFloorEntities(10, floor, streams)` — the boss
+Monster entity is placed at `bossArena.center`. No mapgen-level
+changes; the override is sim-side.
+
+**Win-state transition.** Phase 3 already detects `outcome ===
+"won"` when the floor-10 boss reaches HP 0. Phase 7 wires the
+win-screen UI activation — `src/ui/win-screen.ts` reads
+`state.outcome === "won"` and renders a shareable fingerprint
+widget. The win state is **replayable**: a fresh run from genesis
+with the same action log produces the same final state hash.
+Asserted by a new test (likely `tests/sim/boss-replay.test.ts`).
+
+**Atlas extension — coordinate-stable for Phases 4 + 6.A.2.**
+Phase 7 adds ~4 new atlas recipes (3 NPCs — fixer, info-broker,
+plus the boss; npc.ripperdoc already shipped in Phase 4). The
+existing 26 sprite coordinates remain unchanged (Phase 4's 7 +
+Phase 6.A.2's 16 + Phase 7.A.1's 3 carry-forward); new recipes
+APPEND. Atlas regenerates twice during Phase 7: once in 7.A.1 (the
+3 carry-forward Phase 3 item recipes) and again in 7.A.2 (the new
+NPC + boss recipes). Each regeneration bumps `ATLAS_DIGEST` + the
+4 preset-seed `expectedHash` values.
+
+**`ATLAS_DIGEST` after Phase 7.A.1.** The atlas regenerated with
+the 3 carry-forward item recipes; new value pinned in
+`src/core/self-test.ts`:
+`a3f7e3caa857b5edbd1728a874b858484e58150658277a54dc9506f0489edb08`.
+Phase 7.A.2 will bump this again when the NPC + boss recipes land.
+
+**Deferred Phase 7 contracts.**
+- The exact action vocabulary for shop interactions (single `talk`
+  action that opens a multi-step UI flow vs. discrete `buy`/`sell`
+  per-transaction actions) is resolved during 7.A.2's design pass.
+- Boss-FSM phase count and per-phase scaling values are pinned in
+  7.A.2.
+- Win-screen layout and shareable-fingerprint format are resolved
+  during 7.A.2; full URL-fingerprint sharing lands in Phase 8.
+- NPC dialog text / flavor strings live in a future `theme`
+  registry (Phase 9 polish).
+
 ### Build-time constants
 
 `commitHash` and `rulesetVersion` are injected via Vite `define`. They
