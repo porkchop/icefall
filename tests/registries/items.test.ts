@@ -5,9 +5,9 @@ import {
   getItemKind,
 } from "../../src/registries/items";
 
-describe("item registry — Phase 3 decision 13", () => {
-  it("ships exactly 5 entries (data-only, no inventory mechanics in Phase 3)", () => {
-    expect(ITEM_KINDS.length).toBe(5);
+describe("item registry — Phase 3 decision 13 + Phase 6.A.2 expansion", () => {
+  it("ships 20 entries — original 5 from Phase 3 + 15 expansions in Phase 6.A.2", () => {
+    expect(ITEM_KINDS.length).toBe(20);
   });
 
   it("ITEM_KIND_IDS exactly mirrors ITEM_KINDS in order", () => {
@@ -29,6 +29,18 @@ describe("item registry — Phase 3 decision 13", () => {
       expect(Number.isInteger(k.tier)).toBe(true);
       expect(k.tier).toBeGreaterThan(0);
       expect(["currency", "consumable", "equipment"]).toContain(k.category);
+    }
+  });
+
+  it("every entry's effect is a recognized variant with non-negative integer fields", () => {
+    for (const k of ITEM_KINDS) {
+      expect(["heal", "atk-bonus", "def-bonus", "none"]).toContain(k.effect.kind);
+      if (k.effect.kind !== "none") {
+        expect(Number.isInteger(k.effect.base)).toBe(true);
+        expect(k.effect.base).toBeGreaterThanOrEqual(0);
+        expect(Number.isInteger(k.effect.variance)).toBe(true);
+        expect(k.effect.variance).toBeGreaterThanOrEqual(0);
+      }
     }
   });
 

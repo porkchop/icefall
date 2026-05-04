@@ -25,21 +25,43 @@ import {
   ACTION_TYPE_MOVE,
   ACTION_TYPE_ATTACK,
   ACTION_TYPE_DESCEND,
+  ACTION_TYPE_PICKUP,
+  ACTION_TYPE_DROP,
+  ACTION_TYPE_EQUIP,
+  ACTION_TYPE_UNEQUIP,
+  ACTION_TYPE_USE,
   DIR_DELTAS,
 } from "./params";
 import {
   damageBonus,
   damageAmount,
   clampHp,
+  rollU32,
   ROLL_DOMAIN_ATK_BONUS,
   ROLL_DOMAIN_COUNTER_BONUS,
+  ROLL_DOMAIN_ITEM_HEAL,
+  ROLL_DOMAIN_ITEM_ATK_BONUS,
+  ROLL_DOMAIN_ITEM_DEF_BONUS,
 } from "./combat";
 import {
   bfsDistanceMapFromPlayer,
   decideMonsterAction,
 } from "./ai";
+import {
+  getItemKind,
+  equipmentSlotForItem,
+  type ItemKind,
+  type ItemKindId,
+} from "../registries/items";
+import {
+  inventoryAdd,
+  inventoryRemove,
+  inventoryCount,
+} from "./inventory";
 import type { Floor } from "../mapgen/types";
 import type {
+  Equipment,
+  FloorItem,
   Monster,
   MonsterAIState,
   Player,
@@ -79,6 +101,90 @@ function isMonsterAt(
 }
 
 /**
+ * Return the index of the first FloorItem at `(x, y)`, or `-1` if none.
+ * Items are sorted by `(y, x, kind)` (Phase 3 frozen contract); the
+ * scan terminates as soon as we pass the row.
+ */
+function findFloorItemIndexAt(
+  items: readonly FloorItem[],
+  y: number,
+  x: number,
+): number {
+  for (let i = 0; i < items.length; i++) {
+    const it = items[i]!;
+    if (it.y === y && it.x === x) return i;
+    // Items are sorted by (y, x, kind). Once we pass the row, no match
+    // can exist further in the array.
+    if (it.y > y || (it.y === y && it.x > x)) return -1;
+  }
+  return -1;
+}
+
+/**
+ * Insert a FloorItem preserving the (y, x, kind) sort. Pure — returns
+ * a fresh frozen array. Mirrors the discipline in `src/sim/run.ts`
+ * `spawnFloorEntities`.
+ */
+function floorItemsInsert(
+  items: readonly FloorItem[],
+  y: number,
+  x: number,
+  kind: ItemKindId,
+): readonly FloorItem[] {
+  const next: FloorItem[] = items.slice();
+  next.push({ y, x, kind });
+  next.sort(
+    (a, b) =>
+      a.y - b.y ||
+      a.x - b.x ||
+      (a.kind < b.kind ? -1 : a.kind > b.kind ? 1 : 0),
+  );
+  return Object.freeze(next);
+}
+
+/**
+ * Resolve the integer effect-bonus from a registered `ItemEffect` at a
+ * given roll index. Phase 6 frozen contract: when `variance > 0` the
+ * bonus consumes one `rollU32` call against the matching domain;
+ * `variance === 0` (or `kind === "none"`) consumes zero rolls.
+ */
+function resolveEffectBonus(
+  effect: ItemKind["effect"],
+  domain:
+    | typeof ROLL_DOMAIN_ITEM_HEAL
+    | typeof ROLL_DOMAIN_ITEM_ATK_BONUS
+    | typeof ROLL_DOMAIN_ITEM_DEF_BONUS,
+  stateHashPre: Uint8Array,
+  action: Action,
+  index: number,
+): number {
+  if (effect.kind === "none") return 0;
+  if (effect.variance === 0) return effect.base;
+  const r = rollU32(stateHashPre, action, domain, index);
+  return effect.base + (r % effect.variance);
+}
+
+/**
+ * Returns the player's equipped weapon `ItemKind`, or `null` if no
+ * weapon is equipped or the equipped id is not registered.
+ */
+function equippedWeaponKind(equipment: Equipment): ItemKind | null {
+  const id = equipment.weapon;
+  if (id === null) return null;
+  return getItemKind(id);
+}
+
+/**
+ * Returns the player's equipped cyberware `ItemKind`, or `null` if no
+ * cyberware is equipped or the equipped id is not registered.
+ */
+function equippedCyberwareKind(equipment: Equipment): ItemKind | null {
+  const id = equipment.cyberware;
+  if (id === null) return null;
+  return getItemKind(id);
+}
+
+/**
  * The single action resolver. Returns the new `RunState`.
  *
  * - Asserts the state hash is advanced exactly once per call (frozen
@@ -105,6 +211,7 @@ export function tick(state: RunState, action: Action): RunState {
 
   let nextPlayer: Player = player;
   let nextMonsters: readonly Monster[] = state.floorState.monsters;
+  let nextFloorItems: readonly FloorItem[] = state.floorState.items;
   let nextFloorN = state.floorN;
   let pendingFloorEntry = false;
   let outcome: RunOutcome = state.outcome;
@@ -149,13 +256,34 @@ export function tick(state: RunState, action: Action): RunState {
         const nx = player.pos.x + delta.dx;
         const target = findMonsterAt(nextMonsters, ny, nx);
         if (target !== undefined) {
-          const bonus = damageBonus(
+          // Phase 3 base atk-bonus roll (combat:atk-bonus, index 0).
+          const baseBonus = damageBonus(
             stateHashPre,
             action,
             ROLL_DOMAIN_ATK_BONUS,
             0,
           );
-          const dmg = damageAmount(player.atk, target.def, bonus);
+          // Phase 6 equipment-modifier injection: when a weapon is
+          // equipped AND its effect is `atk-bonus`, add the
+          // item-effect roll (item:effect:atk-bonus, index 0) to the
+          // existing combat bonus. Integer addition only — the damage
+          // formula `dmg = max(1, atk - def + bonus)` is unchanged.
+          const weapon = equippedWeaponKind(player.equipment);
+          let weaponBonus = 0;
+          if (weapon !== null && weapon.effect.kind === "atk-bonus") {
+            weaponBonus = resolveEffectBonus(
+              weapon.effect,
+              ROLL_DOMAIN_ITEM_ATK_BONUS,
+              stateHashPre,
+              action,
+              0,
+            );
+          }
+          const dmg = damageAmount(
+            player.atk,
+            target.def,
+            baseBonus + weaponBonus,
+          );
           const newHp = clampHp(target.hp, dmg);
           nextMonsters = nextMonsters.map((m) =>
             m.id === target.id ? { ...m, hp: newHp } : m,
@@ -173,6 +301,147 @@ export function tick(state: RunState, action: Action): RunState {
       ) {
         nextFloorN = state.floorN + 1;
         pendingFloorEntry = true;
+      }
+      break;
+    }
+    case ACTION_TYPE_PICKUP: {
+      // Phase 6: pick up the FloorItem at the player's current cell.
+      // No-op if the cell has no item. Items stack into inventory by
+      // kind (sorted insertion).
+      const idx = findFloorItemIndexAt(
+        nextFloorItems,
+        player.pos.y,
+        player.pos.x,
+      );
+      if (idx >= 0) {
+        const it = nextFloorItems[idx]!;
+        const nextItems: FloorItem[] = nextFloorItems.slice();
+        nextItems.splice(idx, 1);
+        nextFloorItems = Object.freeze(nextItems);
+        nextPlayer = {
+          ...nextPlayer,
+          inventory: inventoryAdd(nextPlayer.inventory, it.kind),
+        };
+      }
+      break;
+    }
+    case ACTION_TYPE_DROP: {
+      // Phase 6: drop one unit of the requested kind from inventory
+      // onto the player's current cell. No-op if the kind isn't held
+      // or if `action.item` is missing.
+      const itemId = action.item as ItemKindId | undefined;
+      if (
+        itemId !== undefined &&
+        inventoryCount(nextPlayer.inventory, itemId) >= 1
+      ) {
+        nextPlayer = {
+          ...nextPlayer,
+          inventory: inventoryRemove(nextPlayer.inventory, itemId),
+        };
+        nextFloorItems = floorItemsInsert(
+          nextFloorItems,
+          player.pos.y,
+          player.pos.x,
+          itemId,
+        );
+      }
+      break;
+    }
+    case ACTION_TYPE_EQUIP: {
+      // Phase 6: move one unit of the requested kind from inventory
+      // to the matching equipment slot. If the slot is occupied, the
+      // displaced item returns to inventory atomically. No-op if the
+      // item kind doesn't dispatch to a slot (e.g. consumables,
+      // currency, or `item.cyberdeck-mod-1` which has no slot mapping
+      // until Phase 7+).
+      const itemId = action.item as ItemKindId | undefined;
+      if (itemId !== undefined) {
+        const slot = equipmentSlotForItem(itemId);
+        if (
+          slot !== null &&
+          inventoryCount(nextPlayer.inventory, itemId) >= 1
+        ) {
+          // Remove one unit from inventory.
+          let nextInv = inventoryRemove(nextPlayer.inventory, itemId);
+          // If a different item is currently in the slot, put it back
+          // into inventory.
+          const displaced = nextPlayer.equipment[slot];
+          if (displaced !== null && displaced !== itemId) {
+            nextInv = inventoryAdd(nextInv, displaced);
+          }
+          const nextEquip: Equipment = {
+            ...nextPlayer.equipment,
+            [slot]: itemId,
+          };
+          nextPlayer = {
+            ...nextPlayer,
+            inventory: nextInv,
+            equipment: Object.freeze(nextEquip),
+          };
+        }
+      }
+      break;
+    }
+    case ACTION_TYPE_UNEQUIP: {
+      // Phase 6: move the requested kind from its slot back to
+      // inventory. No-op if the item isn't equipped.
+      const itemId = action.item as ItemKindId | undefined;
+      if (itemId !== undefined) {
+        const slot = equipmentSlotForItem(itemId);
+        if (slot !== null && nextPlayer.equipment[slot] === itemId) {
+          const nextEquip: Equipment = {
+            ...nextPlayer.equipment,
+            [slot]: null,
+          };
+          nextPlayer = {
+            ...nextPlayer,
+            inventory: inventoryAdd(nextPlayer.inventory, itemId),
+            equipment: Object.freeze(nextEquip),
+          };
+        }
+      }
+      break;
+    }
+    case ACTION_TYPE_USE: {
+      // Phase 6: consume one unit of the requested kind, applying its
+      // effect. Phase 6.A.2 ships only `consumable`-category items
+      // with `kind: "heal"` effects; other categories no-op.
+      const itemId = action.item as ItemKindId | undefined;
+      if (
+        itemId !== undefined &&
+        inventoryCount(nextPlayer.inventory, itemId) >= 1
+      ) {
+        const kind = getItemKind(itemId);
+        if (kind.category === "consumable" && kind.effect.kind === "heal") {
+          const healAmt = resolveEffectBonus(
+            kind.effect,
+            ROLL_DOMAIN_ITEM_HEAL,
+            stateHashPre,
+            action,
+            0,
+          );
+          const newHp = Math.min(
+            nextPlayer.hpMax,
+            nextPlayer.hp + healAmt,
+          );
+          nextPlayer = {
+            ...nextPlayer,
+            hp: newHp,
+            inventory: inventoryRemove(nextPlayer.inventory, itemId),
+          };
+        } else if (kind.category === "consumable") {
+          // Consumable with non-heal effect — still consume the item.
+          // (Phase 3 `item.stim-patch` / `item.trauma-pack` have
+          // `effect: { kind: "none" }` so this branch fires for them
+          // too — using a Phase-3 consumable is a no-op heal but the
+          // item is consumed, mirroring real-world sim semantics.)
+          nextPlayer = {
+            ...nextPlayer,
+            inventory: inventoryRemove(nextPlayer.inventory, itemId),
+          };
+        }
+        // Non-consumable categories (currency, equipment) — using is
+        // a no-op (item not consumed). Phase 7+ may add behaviors.
       }
       break;
     }
@@ -283,8 +552,29 @@ export function tick(state: RunState, action: Action): RunState {
           ROLL_DOMAIN_COUNTER_BONUS,
           counterIndex,
         );
+        // Phase 6 equipment-modifier injection: when cyberware with a
+        // `def-bonus` effect is equipped, the bonus is ADDED to the
+        // player's effective `def` (so the attacker's effective
+        // `atk - def` shrinks). The roll uses
+        // `item:effect:def-bonus` at the same index as the
+        // counter-bonus roll for this monster.
+        const cyber = equippedCyberwareKind(workingPlayer.equipment);
+        let defBonus = 0;
+        if (cyber !== null && cyber.effect.kind === "def-bonus") {
+          defBonus = resolveEffectBonus(
+            cyber.effect,
+            ROLL_DOMAIN_ITEM_DEF_BONUS,
+            stateHashPre,
+            action,
+            counterIndex,
+          );
+        }
         counterIndex++;
-        const dmg = damageAmount(cur.atk, workingPlayer.def, bonus);
+        const dmg = damageAmount(
+          cur.atk,
+          workingPlayer.def + defBonus,
+          bonus,
+        );
         const newHp = clampHp(workingPlayer.hp, dmg);
         workingPlayer = {
           ...workingPlayer,
@@ -315,7 +605,7 @@ export function tick(state: RunState, action: Action): RunState {
       : {
           floor: state.floorState.floor,
           monsters: nextMonsters,
-          items: state.floorState.items,
+          items: nextFloorItems,
         },
     player: nextPlayer,
     outcome,

@@ -18,8 +18,8 @@ import type { RecipeContext } from "../../src/atlas/recipes/types";
  */
 
 describe("ATLAS_RECIPES — shape", () => {
-  it("ships exactly seven entries (per docs/PHASES.md:209)", () => {
-    expect(ATLAS_RECIPES.length).toBe(7);
+  it("ships 23 entries — Phase 4's 7 + Phase 6.A.2's 16 item additions", () => {
+    expect(ATLAS_RECIPES.length).toBe(23);
   });
 
   it("every entry has a regex-conforming recipe ID", () => {
@@ -52,17 +52,53 @@ describe("ATLAS_RECIPES — shape", () => {
   });
 });
 
-describe("ATLAS_RECIPES — slot coverage (Phase 4 spec)", () => {
-  it("covers the seven Phase 4 slot IDs", () => {
-    const slots = ATLAS_RECIPES.map((r) => r.slot).sort();
-    expect(slots).toEqual([
-      "item.cred-chip",
-      "monster.ice.daemon",
-      "npc.ripperdoc",
-      "player",
-      "tile.door.cyberdoor",
-      "tile.floor.cyberfloor_01",
-      "tile.wall.cyberfloor_01",
+describe("ATLAS_RECIPES — slot coverage (Phase 4 + Phase 6.A.2)", () => {
+  it("includes the seven Phase 4 frozen slots", () => {
+    const slots = new Set(ATLAS_RECIPES.map((r) => r.slot));
+    expect(slots.has("item.cred-chip")).toBe(true);
+    expect(slots.has("monster.ice.daemon")).toBe(true);
+    expect(slots.has("npc.ripperdoc")).toBe(true);
+    expect(slots.has("player")).toBe(true);
+    expect(slots.has("tile.door.cyberdoor")).toBe(true);
+    expect(slots.has("tile.floor.cyberfloor_01")).toBe(true);
+    expect(slots.has("tile.wall.cyberfloor_01")).toBe(true);
+  });
+
+  it("includes the Phase 6.A.2 item slot ids (one per non-cred-chip item registry entry)", () => {
+    const slots = new Set(ATLAS_RECIPES.map((r) => r.slot));
+    const expected = [
+      "item.consumable.adrenaline-spike",
+      "item.consumable.med-injector",
+      "item.consumable.nano-repair",
+      "item.consumable.syringe",
+      "item.cyber.armor",
+      "item.cyber.dermal-plating",
+      "item.cyber.neural-link",
+      "item.cyber.reflex-booster",
+      "item.cyber.subdermal-armor",
+      "item.eddies",
+      "item.weapon.cyberblade",
+      "item.weapon.knife",
+      "item.weapon.monoblade",
+      "item.weapon.pistol",
+      "item.weapon.shotgun",
+      "item.weapon.smg",
+    ];
+    for (const e of expected) {
+      expect(slots.has(e as never)).toBe(true);
+    }
+  });
+
+  it("preserves the Phase 4 declaration order in the first seven entries (coordinate-stability)", () => {
+    const firstSeven = ATLAS_RECIPES.slice(0, 7).map((r) => r.id);
+    expect(firstSeven).toEqual([
+      "atlas-recipe.cyberpunk.tile.floor",
+      "atlas-recipe.cyberpunk.tile.wall",
+      "atlas-recipe.cyberpunk.tile.door",
+      "atlas-recipe.cyberpunk.monster.ice-daemon",
+      "atlas-recipe.cyberpunk.item.cred-chip",
+      "atlas-recipe.cyberpunk.npc.ripperdoc",
+      "atlas-recipe.cyberpunk.player.player",
     ]);
   });
 });

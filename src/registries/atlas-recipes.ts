@@ -9,12 +9,22 @@
  *
  * Phase 4 ships seven recipes — floor tile, wall tile, door tile, one
  * monster, one item, one NPC, the player sprite — per
- * `docs/PHASES.md:209`. Phase 6 + 7 add additive entries.
+ * `docs/PHASES.md:209`. Phase 6.A.2 appends 16 new item recipes (one
+ * per non-cred-chip ItemKindId in the expanded item registry) so the
+ * count is now 23. Phase 7 will add NPC + boss recipes.
+ *
+ * Phase 6 frozen contract (`docs/ARCHITECTURE.md` "Phase 6 frozen
+ * contracts" → "Atlas extension — coordinate-stable for Phase 4
+ * sprites"): the existing seven Phase 4 sprite coordinates remain
+ * unchanged; new recipes APPEND to the registry-declaration order so
+ * the row-major `placeRecipes` packer slots them after the Phase 4
+ * coordinates.
  */
 
 import type { PRNG } from "../core/prng";
 import type { Palette } from "../atlas/palette";
-import type { RecipeContext } from "../atlas/recipes/floor";
+import type { RecipeContext } from "../atlas/recipes/types";
+// Phase 4 originals (positions 0..6 in the array — coordinate-stable).
 import { recipeFloor } from "../atlas/recipes/floor";
 import { recipeWall } from "../atlas/recipes/wall";
 import { recipeDoor } from "../atlas/recipes/door";
@@ -22,15 +32,52 @@ import { recipeMonsterIceDaemon } from "../atlas/recipes/monster-ice-daemon";
 import { recipeItemCredChip } from "../atlas/recipes/item-cred-chip";
 import { recipeNpcRipperdoc } from "../atlas/recipes/npc-ripperdoc";
 import { recipePlayer } from "../atlas/recipes/player";
+// Phase 6.A.2 additions (positions 7+ in the array — appended).
+import { recipeItemConsumableAdrenalineSpike } from "../atlas/recipes/item-consumable-adrenaline-spike";
+import { recipeItemConsumableMedInjector } from "../atlas/recipes/item-consumable-med-injector";
+import { recipeItemConsumableNanoRepair } from "../atlas/recipes/item-consumable-nano-repair";
+import { recipeItemConsumableSyringe } from "../atlas/recipes/item-consumable-syringe";
+import { recipeItemCyberArmor } from "../atlas/recipes/item-cyber-armor";
+import { recipeItemCyberDermalPlating } from "../atlas/recipes/item-cyber-dermal-plating";
+import { recipeItemCyberNeuralLink } from "../atlas/recipes/item-cyber-neural-link";
+import { recipeItemCyberReflexBooster } from "../atlas/recipes/item-cyber-reflex-booster";
+import { recipeItemCyberSubdermalArmor } from "../atlas/recipes/item-cyber-subdermal-armor";
+import { recipeItemEddies } from "../atlas/recipes/item-eddies";
+import { recipeItemWeaponCyberblade } from "../atlas/recipes/item-weapon-cyberblade";
+import { recipeItemWeaponKnife } from "../atlas/recipes/item-weapon-knife";
+import { recipeItemWeaponMonoblade } from "../atlas/recipes/item-weapon-monoblade";
+import { recipeItemWeaponPistol } from "../atlas/recipes/item-weapon-pistol";
+import { recipeItemWeaponShotgun } from "../atlas/recipes/item-weapon-shotgun";
+import { recipeItemWeaponSmg } from "../atlas/recipes/item-weapon-smg";
 
 export type AtlasSlotId =
+  // Phase 4 frozen seven (do NOT reorder).
   | "tile.floor.cyberfloor_01"
   | "tile.wall.cyberfloor_01"
   | "tile.door.cyberdoor"
   | "monster.ice.daemon"
   | "item.cred-chip"
   | "npc.ripperdoc"
-  | "player";
+  | "player"
+  // Phase 6.A.2 additions (slot ids match the corresponding
+  // `ItemKindId` so the renderer can look them up directly via
+  // `floorItem.kind`).
+  | "item.consumable.adrenaline-spike"
+  | "item.consumable.med-injector"
+  | "item.consumable.nano-repair"
+  | "item.consumable.syringe"
+  | "item.cyber.armor"
+  | "item.cyber.dermal-plating"
+  | "item.cyber.neural-link"
+  | "item.cyber.reflex-booster"
+  | "item.cyber.subdermal-armor"
+  | "item.eddies"
+  | "item.weapon.cyberblade"
+  | "item.weapon.knife"
+  | "item.weapon.monoblade"
+  | "item.weapon.pistol"
+  | "item.weapon.shotgun"
+  | "item.weapon.smg";
 
 export type Recipe = (
   prng: PRNG,
@@ -55,6 +102,7 @@ export const ATLAS_RECIPE_ID_REGEX =
   /^atlas-recipe\.(cyberpunk)\.(tile|monster|item|player|npc|ui|boss)\.[a-z][a-z0-9-]*$/;
 
 export const ATLAS_RECIPES: readonly AtlasRecipeEntry[] = Object.freeze([
+  // ----- Phase 4 frozen seven (positions 0..6 — coordinate-stable) -----
   Object.freeze({
     id: "atlas-recipe.cyberpunk.tile.floor",
     recipe: recipeFloor,
@@ -103,6 +151,124 @@ export const ATLAS_RECIPES: readonly AtlasRecipeEntry[] = Object.freeze([
     tilesWide: 1,
     tilesHigh: 1,
     slot: "player",
+  }),
+  // ----- Phase 6.A.2 additions (positions 7+ — appended) -----
+  Object.freeze({
+    id: "atlas-recipe.cyberpunk.item.consumable-adrenaline-spike",
+    recipe: recipeItemConsumableAdrenalineSpike,
+    tilesWide: 1,
+    tilesHigh: 1,
+    slot: "item.consumable.adrenaline-spike",
+  }),
+  Object.freeze({
+    id: "atlas-recipe.cyberpunk.item.consumable-med-injector",
+    recipe: recipeItemConsumableMedInjector,
+    tilesWide: 1,
+    tilesHigh: 1,
+    slot: "item.consumable.med-injector",
+  }),
+  Object.freeze({
+    id: "atlas-recipe.cyberpunk.item.consumable-nano-repair",
+    recipe: recipeItemConsumableNanoRepair,
+    tilesWide: 1,
+    tilesHigh: 1,
+    slot: "item.consumable.nano-repair",
+  }),
+  Object.freeze({
+    id: "atlas-recipe.cyberpunk.item.consumable-syringe",
+    recipe: recipeItemConsumableSyringe,
+    tilesWide: 1,
+    tilesHigh: 1,
+    slot: "item.consumable.syringe",
+  }),
+  Object.freeze({
+    id: "atlas-recipe.cyberpunk.item.cyber-armor",
+    recipe: recipeItemCyberArmor,
+    tilesWide: 1,
+    tilesHigh: 1,
+    slot: "item.cyber.armor",
+  }),
+  Object.freeze({
+    id: "atlas-recipe.cyberpunk.item.cyber-dermal-plating",
+    recipe: recipeItemCyberDermalPlating,
+    tilesWide: 1,
+    tilesHigh: 1,
+    slot: "item.cyber.dermal-plating",
+  }),
+  Object.freeze({
+    id: "atlas-recipe.cyberpunk.item.cyber-neural-link",
+    recipe: recipeItemCyberNeuralLink,
+    tilesWide: 1,
+    tilesHigh: 1,
+    slot: "item.cyber.neural-link",
+  }),
+  Object.freeze({
+    id: "atlas-recipe.cyberpunk.item.cyber-reflex-booster",
+    recipe: recipeItemCyberReflexBooster,
+    tilesWide: 1,
+    tilesHigh: 1,
+    slot: "item.cyber.reflex-booster",
+  }),
+  Object.freeze({
+    id: "atlas-recipe.cyberpunk.item.cyber-subdermal-armor",
+    recipe: recipeItemCyberSubdermalArmor,
+    tilesWide: 1,
+    tilesHigh: 1,
+    slot: "item.cyber.subdermal-armor",
+  }),
+  Object.freeze({
+    id: "atlas-recipe.cyberpunk.item.eddies",
+    recipe: recipeItemEddies,
+    tilesWide: 1,
+    tilesHigh: 1,
+    slot: "item.eddies",
+  }),
+  Object.freeze({
+    id: "atlas-recipe.cyberpunk.item.weapon-cyberblade",
+    recipe: recipeItemWeaponCyberblade,
+    tilesWide: 1,
+    tilesHigh: 1,
+    slot: "item.weapon.cyberblade",
+  }),
+  Object.freeze({
+    id: "atlas-recipe.cyberpunk.item.weapon-knife",
+    // Phase 3 listed `item.weapon.knife` but Phase 4 did not ship a
+    // recipe for it (only `item.cred-chip` was painted as the lone
+    // item). Phase 6.A.2 lands the dedicated recipe here so the
+    // FloorItem renderer can blit dropped knives uniformly with the
+    // other Phase 6 weapon items.
+    recipe: recipeItemWeaponKnife,
+    tilesWide: 1,
+    tilesHigh: 1,
+    slot: "item.weapon.knife",
+  }),
+  Object.freeze({
+    id: "atlas-recipe.cyberpunk.item.weapon-monoblade",
+    recipe: recipeItemWeaponMonoblade,
+    tilesWide: 1,
+    tilesHigh: 1,
+    slot: "item.weapon.monoblade",
+  }),
+  Object.freeze({
+    id: "atlas-recipe.cyberpunk.item.weapon-pistol",
+    recipe: recipeItemWeaponPistol,
+    tilesWide: 1,
+    tilesHigh: 1,
+    slot: "item.weapon.pistol",
+  }),
+  Object.freeze({
+    id: "atlas-recipe.cyberpunk.item.weapon-shotgun",
+    recipe: recipeItemWeaponShotgun,
+    tilesWide: 1,
+    tilesHigh: 1,
+    slot: "item.weapon.shotgun",
+  }),
+  Object.freeze({
+    id: "atlas-recipe.cyberpunk.item.weapon-smg",
+    recipe: recipeItemWeaponSmg,
+    tilesWide: 1,
+    tilesHigh: 1,
+    slot: "item.weapon.smg",
   }),
 ]);
 

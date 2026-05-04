@@ -36,7 +36,13 @@ const PLAYER_INITIAL_HP_MAX = 30;
 const PLAYER_INITIAL_ATK = 5;
 const PLAYER_INITIAL_DEF = 2;
 
-/** Build the initial `Player` at the floor entrance. */
+/**
+ * Build the initial `Player` at the floor entrance.
+ *
+ * Phase 6 frozen contract: the player starts with an empty inventory
+ * and no equipment in any slot. Inventory is fully reconstructible
+ * from the action log (no inventory state is persisted separately).
+ */
 export function makeInitialPlayer(floor: Floor): Player {
   return {
     id: 0,
@@ -46,6 +52,8 @@ export function makeInitialPlayer(floor: Floor): Player {
     hpMax: PLAYER_INITIAL_HP_MAX,
     atk: PLAYER_INITIAL_ATK,
     def: PLAYER_INITIAL_DEF,
+    inventory: Object.freeze([]),
+    equipment: Object.freeze({ weapon: null, cyberware: null }),
   };
 }
 

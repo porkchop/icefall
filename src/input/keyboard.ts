@@ -80,6 +80,11 @@ export const DEFAULT_KEY_BINDINGS: KeyBindings = Object.freeze({
   KeyQ: { type: "move", dir: 7 as Direction },
   Space: { type: "wait" },
   Period: { type: "wait" },
+  // Phase 6.A.2 — pickup keybinding. `KeyG` mnemonic for "grab".
+  // Drop / equip / unequip / use are programmatic in 6.A.2 (Phase 7
+  // or 9 polish can add UI affordances when slot management gets a
+  // dedicated screen).
+  KeyG: { type: "pickup" },
 });
 
 /**

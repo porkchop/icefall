@@ -20,6 +20,8 @@ import { loadAtlas, type LoadedAtlas } from "./atlas/loader";
 import { drawScene, type RenderTarget, type AtlasImage } from "./render/canvas";
 import { startKeyboard, DEFAULT_KEY_BINDINGS } from "./input/keyboard";
 import { renderHud } from "./ui/hud";
+import { renderInventory } from "./ui/inventory";
+import { renderEquipment } from "./ui/equipment";
 import type { RunState } from "./sim/types";
 import type { Action } from "./core/encode";
 
@@ -485,7 +487,7 @@ async function startGame(host: HTMLElement): Promise<void> {
     el(
       "p",
       "game-help",
-      "Arrow keys / WASD: move (8 directions via Q/E/Z/C). Space or '.': wait. Shift+'.': descend stairs.",
+      "Arrow keys / WASD: move (8 directions via Q/E/Z/C). Space or '.': wait. Shift+'.': descend stairs. G: grab item.",
     ),
   );
 
@@ -505,6 +507,15 @@ async function startGame(host: HTMLElement): Promise<void> {
   // gives a visible focus ring for accessibility-by-default.
   canvas.tabIndex = 0;
   section.appendChild(canvas);
+
+  // Phase 6.A.2 — inventory + equipment panels.
+  const inventoryHost = el("section", "game-inventory");
+  inventoryHost.id = "inventory";
+  section.appendChild(inventoryHost);
+
+  const equipmentHost = el("section", "game-equipment");
+  equipmentHost.id = "equipment";
+  section.appendChild(equipmentHost);
 
   host.appendChild(section);
 
@@ -560,6 +571,8 @@ async function startGame(host: HTMLElement): Promise<void> {
   function rerender(): void {
     drawScene(target, state);
     renderHud(hudHost, state);
+    renderInventory(inventoryHost, state);
+    renderEquipment(equipmentHost, state);
     window.__GAME_STATE_HASH__ = sha256Hex(state.stateHash);
     window.__GAME_FLOOR__ = state.floorN;
     window.__GAME_HP__ = state.player.hp;

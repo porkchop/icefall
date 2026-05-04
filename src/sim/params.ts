@@ -53,6 +53,35 @@ export const ACTION_TYPES_PHASE_3: readonly string[] = Object.freeze([
 ]);
 
 /**
+ * Phase 6 additive action vocabulary (Phase 6 frozen contract:
+ * inventory + currency + equipment). All five reuse the existing
+ * `TAG_ITEM = 0x20` wire tag — no `ACTION_VERSION` bump (Phase 1
+ * additive-vocabulary rule: new types using existing tags do NOT bump
+ * the encoder version).
+ *
+ * Required fields:
+ *   - `pickup`   — none
+ *   - `drop`     — `item`
+ *   - `equip`    — `item`
+ *   - `unequip`  — `item`
+ *   - `use`      — `item`
+ */
+export const ACTION_TYPE_PICKUP = "pickup" as const;
+export const ACTION_TYPE_DROP = "drop" as const;
+export const ACTION_TYPE_EQUIP = "equip" as const;
+export const ACTION_TYPE_UNEQUIP = "unequip" as const;
+export const ACTION_TYPE_USE = "use" as const;
+
+export const ACTION_TYPES_PHASE_6: readonly string[] = Object.freeze([
+  ...ACTION_TYPES_PHASE_3,
+  ACTION_TYPE_PICKUP,
+  ACTION_TYPE_DROP,
+  ACTION_TYPE_EQUIP,
+  ACTION_TYPE_UNEQUIP,
+  ACTION_TYPE_USE,
+]);
+
+/**
  * Direction ordinals — frozen by addendum N4. The eight directions in
  * lexicographic-tiebreak order, with `(dy, dx)` deltas where y increases
  * southward (matching `Floor.tiles[y * width + x]` row-major addressing).

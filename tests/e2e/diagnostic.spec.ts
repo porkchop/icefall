@@ -6,36 +6,40 @@ const RANDOM_WALK_DIGEST =
 const SIM_DIGEST =
   "321c09e5f87e879aebdf58ccaaada5e85f8a114bf01f4e012039eced5dba079e";
 
+// Phase 6.A.2 — atlas regenerated with the expanded item registry.
+// Existing 7 Phase 4 sprite coordinates are unchanged; new sprites
+// append. The new ATLAS_DIGEST replaces the Phase 4 golden literally
+// here per memo addendum N12.
 const ATLAS_DIGEST =
-  "d1b4a8b73d3e2c1b7cd70c26fe15a08faae5d91351d9e2e9a542ce71727b8d1a";
+  "35069834850591c6b72c1946629129a04ed2f1b9446de5ccdd75b28fe6005a47";
 
 // Phase 4 preset-seed expectedHash values (memo addendum N12). Pinned
 // in `src/atlas/preset-seeds.ts` and re-asserted here for the live
-// browser environment.
+// browser environment. Bumped to the new bytes in Phase 6.A.2.
 const PRESET_HASHES: { id: string; seed: string; expectedHash: string }[] = [
   {
     id: "placeholder",
     seed: "icefall-phase4-placeholder-atlas-seed",
     expectedHash:
-      "d1b4a8b73d3e2c1b7cd70c26fe15a08faae5d91351d9e2e9a542ce71727b8d1a",
+      "35069834850591c6b72c1946629129a04ed2f1b9446de5ccdd75b28fe6005a47",
   },
   {
     id: "variant-A",
     seed: "icefall-atlas-variant-A",
     expectedHash:
-      "de525492c8e57d9a0d3a0cf0705473ea71c980fdb0531e23611b8b943e3fbb1b",
+      "c3dc8c8b50592e2c7383d2cafd02d2932afd27a1f898bea9aadc82a5299c7396",
   },
   {
     id: "variant-B",
     seed: "icefall-atlas-variant-B",
     expectedHash:
-      "e06d80723b3a2fe417a53b908aa85a3a087e6c6ac41038bcc2fd809ddbe7dd3a",
+      "405713dfbbbc9b57e2ee3e08b47abe6436d3199ceb2613b602829532bbeef0f8",
   },
   {
     id: "variant-C",
     seed: "icefall-atlas-variant-C",
     expectedHash:
-      "2fd44a69293f6ad7acdff33cb8e30cc34fef4efc73ac6c79bdb3f4c0971d9233",
+      "f77e1a28d6cfe0452ab790503996e787f46a240b2818d8adc1dedfadadbef01c",
   },
 ];
 
@@ -310,4 +314,48 @@ test("diagnostic surface is preserved in a <details> wrapper", async ({
   await expect(page.locator("#floor-preview")).toBeVisible();
   await expect(page.locator("#sim-scripted")).toBeVisible();
   await expect(page.locator("#atlas-preview")).toBeVisible();
+});
+
+// ----------------------------------------------------------------------
+// Phase 6.A.2 playable-game inventory + equipment UI tests.
+// ----------------------------------------------------------------------
+
+test("inventory + equipment panels render alongside the canvas", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.waitForFunction(
+    () => window.__GAME_READY__ === "ready",
+    null,
+    { timeout: 10_000 },
+  );
+  await expect(page.locator("#inventory")).toBeVisible();
+  await expect(page.locator("#equipment")).toBeVisible();
+  // Initial state: empty inventory, empty equipment slots.
+  await expect(page.locator("#inventory")).toContainText("0 stacks");
+  await expect(
+    page.locator("[data-equipment-value-for='weapon']"),
+  ).toContainText("(empty)");
+  await expect(
+    page.locator("[data-equipment-value-for='cyberware']"),
+  ).toContainText("(empty)");
+});
+
+test("pressing G triggers the pickup action (state hash advances)", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.waitForFunction(
+    () => window.__GAME_READY__ === "ready",
+    null,
+    { timeout: 10_000 },
+  );
+  const initialHash = await page.evaluate(() => window.__GAME_STATE_HASH__);
+  await page.keyboard.press("KeyG");
+  await page.waitForTimeout(50);
+  const after = await page.evaluate(() => window.__GAME_STATE_HASH__);
+  // Pickup with no item present is a state-side no-op, but the state
+  // hash still advances because `tick` calls `advance(state, action)`
+  // unconditionally for every player action.
+  expect(after).not.toBe(initialHash);
 });

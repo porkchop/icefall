@@ -17,6 +17,10 @@ import {
   SELF_TEST_INPUTS,
   SELF_TEST_LOG_100,
 } from "../sim/self-test-log";
+import {
+  SELF_TEST_INVENTORY_INPUTS,
+  SELF_TEST_INVENTORY_LOG,
+} from "../sim/self-test-inventory-log";
 import { ACTION_TYPE_WAIT } from "../sim/params";
 import { seedToBytes } from "./seed";
 import { generateAtlas } from "../atlas/generate";
@@ -85,7 +89,7 @@ export const SIM_DIGEST =
  * `architecture-red-team` review.
  */
 export const ATLAS_DIGEST =
-  "d1b4a8b73d3e2c1b7cd70c26fe15a08faae5d91351d9e2e9a542ce71727b8d1a";
+  "35069834850591c6b72c1946629129a04ed2f1b9446de5ccdd75b28fe6005a47";
 
 /**
  * Hardcoded SHA-256 of the encoded PNG for a 16×16 single-color
@@ -96,6 +100,21 @@ export const ATLAS_DIGEST =
  */
 export const ATLAS_ENCODER_SINGLE_COLOR_TILE_HASH =
   "4ea07c563df8743c7b8b4cdd9f11a4a24fa5ee60a0dbc6829f8d81a7d34b8a21";
+
+/**
+ * Hardcoded golden digest of the final state hash after running
+ * `SELF_TEST_INVENTORY_LOG` (a 16-action Phase 6 inventory log) against
+ * `SELF_TEST_INVENTORY_INPUTS`. Pinning point for cross-runtime sim
+ * determinism on the Phase 6 action vocabulary additions: any silent
+ * drift in the pickup/drop/equip/unequip/use handlers, the new item
+ * registry, or the item-effect roll domains surfaces here in any
+ * runtime (Node, Chromium, Firefox, WebKit).
+ *
+ * Phase 6 frozen contract item: changing this constant is a
+ * `rulesetVersion` bump and requires `architecture-red-team` review.
+ */
+export const INVENTORY_DIGEST =
+  "9126830de1ee283b2a0823d57aea4025c2dd1231cd0548c30ed3573481bc46c8";
 
 const DIRECTIONS = ["wait", "move", "use", "attack"] as const;
 
@@ -328,6 +347,24 @@ const checks: Check[] = [
       assert(
         got === SIM_DIGEST,
         `sim-cross-runtime-digest mismatch: actual=${got}`,
+      );
+    },
+  },
+  {
+    name: "inventory-cross-runtime-digest",
+    run() {
+      // Phase 6.A.2 — re-run the 16-action inventory log and assert
+      // the pinned `INVENTORY_DIGEST`. Cross-runtime: any drift in the
+      // Phase 6 action handlers (pickup/drop/equip/unequip/use) or in
+      // the item-effect roll domains surfaces here.
+      const result = runScripted({
+        inputs: SELF_TEST_INVENTORY_INPUTS,
+        actions: SELF_TEST_INVENTORY_LOG,
+      });
+      const got = sha256Hex(result.finalState.stateHash);
+      assert(
+        got === INVENTORY_DIGEST,
+        `inventory-cross-runtime-digest mismatch: actual=${got}`,
       );
     },
   },

@@ -23,7 +23,55 @@ export type Point = { readonly x: number; readonly y: number };
 /** Monster AI FSM (Phase 3 decision 7). */
 export type MonsterAIState = "idle" | "chasing";
 
-/** Player entity. `id` is pinned to 0 (frozen-contract item 5). */
+/**
+ * A single inventory stack — one item kind, positive integer count.
+ * Phase 6 frozen contract (`docs/ARCHITECTURE.md` "Phase 6 frozen
+ * contracts" — "Inventory data shape"): a stack with `count === 0` is
+ * removed (the array does not retain zero-count slots).
+ */
+export type InventoryEntry = {
+  readonly kind: ItemKindId;
+  readonly count: number;
+};
+
+/**
+ * Equipment-slot enumeration. Phase 6 frozen contract: this set is
+ * **frozen** in Phase 6; bumping requires architecture-red-team review
+ * (Phase 9 polish may add `armor`, `accessory`, etc., as additive
+ * `rulesetVersion`-bumping changes).
+ */
+export type EquipmentSlot = "cyberware" | "weapon";
+
+/**
+ * Equipment record — fixed-slot, each holding a single `ItemKindId` or
+ * `null` (slot empty). Slot order in the type literal matches the
+ * alphabetical iteration order of `EQUIPMENT_SLOTS`.
+ */
+export type Equipment = {
+  readonly cyberware: ItemKindId | null;
+  readonly weapon: ItemKindId | null;
+};
+
+/**
+ * Deterministic iteration order over equipment slots. Alphabetical so
+ * any `for (const s of EQUIPMENT_SLOTS)` loop walks slots in the same
+ * order across runtimes (frozen-contract item 6 from Phase 3 — the
+ * SIM_UNORDERED lint discipline applies to any sim-internal iteration).
+ */
+export const EQUIPMENT_SLOTS: readonly EquipmentSlot[] = Object.freeze([
+  "cyberware",
+  "weapon",
+]);
+
+/**
+ * Player entity. `id` is pinned to 0 (frozen-contract item 5).
+ *
+ * Phase 6 frozen contract additions:
+ *   - `inventory` — sorted by `kind` ASC (UTF-16 code-unit order),
+ *     tie-break by `count` DESC; entries with `count === 0` are removed.
+ *     Capacity unbounded in Phase 6.
+ *   - `equipment` — fixed-slot record keyed by `EquipmentSlot`.
+ */
 export type Player = {
   readonly id: 0;
   readonly kind: "player";
@@ -32,6 +80,8 @@ export type Player = {
   readonly hpMax: number;
   readonly atk: number;
   readonly def: number;
+  readonly inventory: readonly InventoryEntry[];
+  readonly equipment: Equipment;
 };
 
 /** Monster entity. `id` is `1..N`, assigned at floor-entry spawn time. */

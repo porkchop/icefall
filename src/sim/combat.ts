@@ -93,6 +93,25 @@ export const ROLL_DOMAIN_ATK_BONUS = "combat:atk-bonus" as const;
 export const ROLL_DOMAIN_COUNTER_BONUS = "combat:counter-bonus" as const;
 
 /**
+ * Phase 6 frozen item-effect domain set (`docs/ARCHITECTURE.md` "Phase
+ * 6 frozen contracts"). These are 7-bit ASCII, length 1..31 bytes —
+ * the same `rollBytes` contract as the Phase 3 combat domains.
+ *
+ *   - `item:effect:heal`       — consumable heal-amount roll
+ *   - `item:effect:atk-bonus`  — equipped-weapon atk modifier on player attack
+ *   - `item:effect:def-bonus`  — equipped-cyberware def modifier on monster counter-attack
+ *
+ * The `index` field for stacked effect rolls increments deterministically
+ * from 0 within a single action's resolution (e.g. weapon at index 0,
+ * cyberware at index 1 within the same player attack — Phase 6
+ * implementation note in 6.A.2; pinned in this comment for the
+ * audit-hostile reader).
+ */
+export const ROLL_DOMAIN_ITEM_HEAL = "item:effect:heal" as const;
+export const ROLL_DOMAIN_ITEM_ATK_BONUS = "item:effect:atk-bonus" as const;
+export const ROLL_DOMAIN_ITEM_DEF_BONUS = "item:effect:def-bonus" as const;
+
+/**
  * Compute the bonus for a damage roll. Low 2 bits of the u32 — uniform
  * over [0..3]. Frozen-contract item 4.
  */
