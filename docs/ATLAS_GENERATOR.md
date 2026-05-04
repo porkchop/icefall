@@ -60,8 +60,11 @@ recipe(prng, palette, ctx)  ────────┘                  read as
 
 `src/atlas/**` is a **build-time-only** peer of `src/sim/**` and
 `src/mapgen/**`. It imports `src/core/**`, the recipe and palette
-constants under itself, and `fdeflate` (the new pinned devDependency
-for DEFLATE compression). It is forbidden from importing `src/sim/**`,
+constants under itself, and `fflate` (the new pinned devDependency
+for DEFLATE compression — the addendum text named this as `fdeflate`,
+which does not exist on the npm registry; `fflate` is the canonical
+pure-JS sync deterministic deflate library and was the encoder
+discipline the addendum was specifying). It is forbidden from importing `src/sim/**`,
 `src/mapgen/**`, `src/render/**`, `src/input/**`, `src/main.ts`, or any
 browser-only path — same discipline as `src/core/**`. The
 `src/render/**` layer (Phase 5+) reads `assets/atlas.png` +
@@ -118,7 +121,7 @@ contracts" section of the memo):
 7. **PNG encoder format** — indexed PNG (color type 3), bit depth 8,
    `PLTE` + `tRNS` chunks, **no ancillary chunks** (no `gAMA`, `sRGB`,
    `cHRM`, `pHYs`, `tEXt`, `tIME`), filter type 0 ("None") for every
-   scanline, `fdeflate` level 1 for DEFLATE, chunk order
+   scanline, `fflate` level 1 for DEFLATE, chunk order
    `IHDR, PLTE, tRNS, IDAT, IEND`. `tRNS` chunk length is exactly
    16 bytes for `paletteCount = 16` (memo addendum N6). Encoder
    uses `Uint8Array` only (no `Buffer`) and `@noble/hashes/sha256`
@@ -203,7 +206,7 @@ against `vite preview`. The cross-OS byte-equality job (Phase 4.B)
 runs the same script on `ubuntu-latest`, `macos-latest`, and
 `windows-latest` with `fail-fast: false` and `node-version: 20.x`
 (memo addendum N14), and asserts SHA-256 equality of all three
-generated `assets/atlas.png` files. Any change to `fdeflate`'s
+generated `assets/atlas.png` files. Any change to `fflate`'s
 version line in `package-lock.json` (including its `integrity`
 hash) auto-flags an `architecture-red-team` review event (memo
 addendum N1).

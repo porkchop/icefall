@@ -63,7 +63,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ["src/core/**/*.ts", "src/sim/**/*.ts", "src/mapgen/**/*.ts"],
+    files: ["src/core/**/*.ts", "src/sim/**/*.ts", "src/mapgen/**/*.ts", "src/atlas/**/*.ts"],
     rules: {
       "no-restricted-syntax": ["error", ...FORBIDDEN_TIME],
       "no-restricted-globals": [
@@ -182,7 +182,12 @@ export default tseslint.config(
     // `tools/**` is the build-time-only Node code surface (memo
     // addendum N1). Node globals are allowed; render/input layers and
     // any browser-only path are forbidden. Phase 2 establishes the
-    // boundary; Phase 4 will adopt the same pattern.
+    // boundary; Phase 4 adopts the same pattern.
+    //
+    // Phase 4 addendum N10: `tools/**` must use the `node:` prefix on
+    // Node built-ins — `node:fs`, `node:path`, `node:url`, never the
+    // bare forms (which resolve through Vite's resolver and can
+    // collide with a mod's local module).
     files: ["tools/**/*.ts"],
     languageOptions: {
       globals: {
@@ -201,6 +206,107 @@ export default tseslint.config(
                 "tools/ is build-time-only Node code — it must not import the running game's render/input layers or browser entry point.",
             },
           ],
+          paths: [
+            {
+              name: "fs",
+              message:
+                "node-builtin: use 'node:fs' (or 'node:path', etc.); the bare form resolves through Vite's resolver and can collide with a mod's local module.",
+            },
+            {
+              name: "path",
+              message:
+                "node-builtin: use 'node:fs' (or 'node:path', etc.); the bare form resolves through Vite's resolver and can collide with a mod's local module.",
+            },
+            {
+              name: "url",
+              message:
+                "node-builtin: use 'node:fs' (or 'node:path', etc.); the bare form resolves through Vite's resolver and can collide with a mod's local module.",
+            },
+            {
+              name: "fs/promises",
+              message:
+                "node-builtin: use 'node:fs/promises'; the bare form resolves through Vite's resolver and can collide with a mod's local module.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    // `src/atlas/**` is the Phase 4 atlas-pipeline layer (decision 11
+    // + addendum B4). Constraints in 4.A.1 (the layer is empty except
+    // for `seed.ts`); constraints enforced for every future entry:
+    //
+    //   - No `Buffer` (global or `node:buffer` import). Cross-runtime
+    //     byte-equality requires `Uint8Array`-only encoding.
+    //   - No `crypto.subtle` (async; the build pipeline is sync).
+    //   - No `node:crypto` / bare `crypto` import. The pipeline uses
+    //     `@noble/hashes/sha256` exclusively (already re-exported from
+    //     `src/core/hash.ts`).
+    //   - No imports from `sim`, `mapgen`, `render`, `input`, `main`.
+    //     Atlas is a peer of sim/mapgen, not a dependent.
+    //
+    // The `crypto.subtle` ban is a member-access selector, mirroring
+    // the `.mapgen` / `.ui` / `.sim` member-access bans elsewhere.
+    files: ["src/atlas/**/*.ts"],
+    ignores: ["src/atlas/**/*.test.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: [
+                "**/sim/**",
+                "**/mapgen/**",
+                "**/render/**",
+                "**/input/**",
+                "**/main",
+              ],
+              message:
+                "src/atlas/** is a peer of sim/mapgen — no upward or sibling layer imports allowed (memo decision 11).",
+            },
+          ],
+          paths: [
+            {
+              name: "node:buffer",
+              message:
+                "src/atlas/** must use Uint8Array only — no `Buffer` (cross-runtime byte-equality, addendum B4).",
+            },
+            {
+              name: "crypto",
+              message:
+                "src/atlas/** must use `@noble/hashes/sha256` via src/core/hash — no `crypto` (addendum B4).",
+            },
+            {
+              name: "node:crypto",
+              message:
+                "src/atlas/** must use `@noble/hashes/sha256` via src/core/hash — no `node:crypto` (addendum B4).",
+            },
+          ],
+        },
+      ],
+      "no-restricted-globals": [
+        "error",
+        { name: "Date", message: "Date is banned in deterministic code." },
+        {
+          name: "performance",
+          message: "performance is banned in deterministic code.",
+        },
+        {
+          name: "Buffer",
+          message:
+            "src/atlas/** must use Uint8Array only — no `Buffer` (cross-runtime byte-equality, addendum B4).",
+        },
+      ],
+      "no-restricted-syntax": [
+        "error",
+        ...FORBIDDEN_TIME,
+        {
+          selector:
+            "MemberExpression[object.name='crypto'][property.name='subtle']",
+          message:
+            "src/atlas/** must not use `crypto.subtle` — async API; pipeline is sync via `@noble/hashes/sha256` (addendum B4).",
         },
       ],
     },

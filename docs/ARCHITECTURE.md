@@ -45,13 +45,14 @@ in as their phases land.
 
 | Layer | Imports allowed | Imports forbidden |
 |---|---|---|
-| `src/core/` | `@noble/hashes/sha256` only | anything browser-specific (`window`, `document`, `crypto.subtle`), anything async, anything in `src/sim/`, `src/render/`, `src/input/` |
-| `src/sim/` | `src/core/`, `src/registries/` | `Math.random`, `Date.now()`, `performance.now()`, `new Date()`, floating-point arithmetic, iteration over un-ordered collections without `sortedEntries()`, `src/render/`, `src/input/` |
+| `src/core/` | `@noble/hashes/sha256` only | anything browser-specific (`window`, `document`, `crypto.subtle`), anything async, anything in `src/sim/`, `src/render/`, `src/input/`, `src/atlas/` |
+| `src/sim/` | `src/core/`, `src/registries/` | `Math.random`, `Date.now()`, `performance.now()`, `new Date()`, floating-point arithmetic, iteration over un-ordered collections without `sortedEntries()`, `src/render/`, `src/input/`, `src/atlas/` |
 | `src/mapgen/` | `src/core/`, `src/registries/` | same as `sim/`, plus member-access of `.sim` or `.ui` on any object (stream-isolation lint rule, memo decision 7) |
-| `src/registries/` | none (pure data + types) | anything from `src/sim/`, `src/mapgen/`, `src/render/`, `src/input/` |
+| `src/atlas/` | `src/core/`, `src/registries/` | `src/sim/`, `src/mapgen/`, `src/render/`, `src/input/`, `src/main`; `node:buffer`, `crypto`, `node:crypto`; `Buffer` global; `crypto.subtle` member access (Phase 4 addendum B4) |
+| `src/registries/` | none (pure data + types) | anything from `src/sim/`, `src/mapgen/`, `src/render/`, `src/input/`, `src/atlas/` |
 | `src/render/` | `src/core/` (read-only types only), `src/sim/` (read-only state), atlas assets | writing to `src/sim/` state, importing `src/core/streams` or `src/sim/combat` |
 | `src/input/` | none from core/sim/render | writing to `src/sim/` state directly |
-| `tools/` | `src/core/`, `src/mapgen/`, `src/registries/`, Node-only modules | the running game's `src/main.ts`, `src/render/`, `src/input/`, browser-only paths |
+| `tools/` | `src/core/`, `src/mapgen/`, `src/registries/`, `src/atlas/` (build-time only), Node-only modules with the `node:` prefix | the running game's `src/main.ts`, `src/render/`, `src/input/`, browser-only paths; bare `fs`/`path`/`url` (Phase 4 addendum N10) |
 
 These rules are enforced primarily by ESLint configuration scoped via
 `overrides` plus a custom `no-float-arithmetic.cjs` rule under
@@ -420,6 +421,263 @@ outcome share the same fingerprint and the same `(finalState,
 finalStateHash, outcome)`; whether the verifier truncates or annotates
 trailing input is Phase 8's choice.
 
+### Phase 4 frozen contracts (atlas pipeline)
+
+These are the contract additions Phase 4.0's planning gate locks in;
+the canonical reference is `artifacts/decision-memo-phase-4.md` (with
+the addendum at the bottom resolving B1–B8 from the architecture
+red-team review). Implementation of the recipe primitives, the PNG
+encoder, and the JSON manifest lands in Phase 4.A.2; the foundation
+they rest on (the `RULES_FILES` canonicalization, the
+`atlasBinaryHash` plugin scaffolding, `src/atlas/seed.ts`, the
+`deriveRulesetVersion` helper, the Phase 4 lint scope additions) lands
+in Phase 4.A.1's drift-detection sweep.
+
+**Recipe primitive set.** Ten functions with pinned signatures and
+integer constants (memo decision 1, 1a). `paletteGradient(n, a, b,
+steps)` requires `steps >= 2` and throws on `0` / `1` with the
+message `paletteGradient: steps must be >= 2 (got <n>); use
+paletteIndex directly for a single-color result` (addendum N4).
+`valueNoise2D(prng, x, y)` consumes **exactly one** `prng.next()`
+call per invocation (addendum N3). The remaining primitives —
+`paletteIndex`, `solidFill`, `pixel`, `outlineRect`, `fillRect`,
+`scanline`, `dither2x2`, `radialGradient` — are signature-pinned in
+the memo's decision 1 table; bumping any signature is a
+`rulesetVersion` bump.
+
+**Recipe signature.**
+
+```ts
+type Recipe = (
+  prng: PRNG,
+  ctx: RecipeContext,                 // tile dimensions, palette, etc.
+) => Uint8Array;                      // length = TILE_SIZE * TILE_SIZE
+```
+
+A recipe is a pure function of its `prng` cursor and its `ctx`.
+Recipes may not import from `sim/`, `mapgen/`, `render/`, `input/`, or
+`main/` (lint-enforced; see below). Coordinate stability holds across
+runs: same `(recipeId, atlasSeed)` → same byte output.
+
+**Recipe ID format.** Regex anchored to `cyberpunk` for v1:
+
+```
+^atlas-recipe\.(cyberpunk)\.(tile|monster|item|player|npc)\.[a-z][a-z0-9-]*$
+```
+
+Adding a new `<theme>` value to the alternation is a `rulesetVersion`
+bump (addendum N11). In practice every theme addition is already a
+bump because the recipes themselves are.
+
+**`streams.atlas(recipeId)` accessor.** A new `RunStreams` accessor
+(Phase 4.A.2 addition). Per-call invariant: a single
+`streams.atlas(recipeId)` call advances `streams.__consumed.size` by
+**exactly 1**, recording exactly the key `"atlas:" + recipeId`. No
+other key is touched (addendum B8). The size-delta is the per-call
+invariant; *first calls* to a fresh key advance by 1, repeat calls to
+the same key are Set-deduplicated and advance by 0 (red-team
+follow-up N20). Phase 6/7 fixtures should assert
+`streams.__consumed.has(expectedKey)` and the count of distinct keys,
+not a naive per-call delta.
+
+The root seed for the atlas pipeline is derived via
+`atlasSeedToBytes(...)`, **not** `seedToBytes(...)` — the two are
+byte-distinct domains (B7).
+
+**Atlas layout constants.** `TILE_SIZE = 16`, `TILE_PADDING = 1`,
+`ATLAS_TILES_WIDE = 16`, `ATLAS_TILES_HIGH = 8`. Bumping
+`ATLAS_TILES_HIGH` or `ATLAS_TILES_WIDE` is **coordinate-stable**
+(existing `(atlasX, atlasY)` are preserved) but **binary-unstable**
+(the IHDR dimensions change → `atlasBinaryHash` bumps →
+`rulesetVersion` bumps → every shared fingerprint breaks). Therefore
+tile-grid resizing is allowed only at a `rulesetVersion` boundary,
+requires `architecture-red-team` review, and is a *pure increase*
+(never a decrease). The cell budget at v1 (`8 × 16 = 128`) is well
+above the Phase 7 ceiling of ~34 effective cells; no bump is
+anticipated through v1 (addendum B6).
+
+**Atlas-grid placement function.** `(atlasX, atlasY, tilesWide,
+tilesHigh)` is allocated by walking `ATLAS_RECIPES` in declaration
+order and packing into the tile grid with `TILE_PADDING` separation.
+Coordinate stability holds under additive recipe growth (decision 3a).
+The wrap-with-skip edge case (a multi-tile sprite that doesn't fit on
+the current row but fits after wrapping) has a fixture test in 4.A.2
+per addendum N9.
+
+**`src/atlas/seed.ts` and `atlasSeedToBytes`.**
+
+```
+ATLAS_SEED_DOMAIN = utf8("icefall:atlas-seed:v1:")    // 22 bytes ASCII
+atlasSeedToBytes(seed: string): Uint8Array =
+  sha256( ATLAS_SEED_DOMAIN ‖ utf8(seed) )            // 32 bytes
+```
+
+The 22-byte fixed prefix byte-distinguishes atlas seeds from run
+seeds (`seedToBytes` has no prefix). Mirrors Phase 1's
+`STREAM_DOMAIN = "icefall:v1:"` discipline. `validateSeedString` is a
+*Phase 4 addition* (red-team follow-up N19): atlas-seed strings must
+be well-formed UTF-16 with UTF-8 byte length in `[1, 255]`. The
+existing `seedToBytes` precondition surface is intentionally
+**unchanged** — the asymmetry is by design (run seeds were already in
+use before the validation discipline was considered, and tightening
+them silently would bump every existing fingerprint with no current
+defect to fix).
+
+**PNG encoder format.** Indexed PNG, color type 3, bit depth 8;
+chunks `IHDR, PLTE, tRNS, IDAT, IEND`; filter byte 0 on every
+scanline; `fflate`-level-1 fixed-output deflate (the addendum named this
+`fdeflate`, which does not exist on npm; `fflate` is the canonical
+substitute and was the encoder discipline being specified); **no ancillary
+chunks** (no `tEXt`, no `tIME`, no `pHYs`). The `tRNS` chunk length
+is **exactly 16 bytes** for `paletteCount = 16`: entries 1..15 are
+`0xFF` (fully opaque) and entry 0 is `0x00` (transparent). The
+spec-allowed truncation is forbidden — it removes byte-stability
+surface against decoders that behave differently on truncated
+`tRNS` (addendum N6).
+
+The encoder asserts `pixels[i] < palette.colors.length` for every
+pixel before emitting IDAT. Violation throws:
+
+```
+pngEncode: pixel <i> has palette index <v> but palette has <N> entries
+```
+
+(addendum N5 — exact error format).
+
+**Color palette.** 16-entry indexed palette; every recipe paints in
+palette indices, never in RGB. Entry 0 is the transparent slot.
+
+**Atlas JSON manifest schema.** `assets/atlas.json` is the manifest
+emitted alongside `assets/atlas.png`. Top-level `schemaVersion = 1`;
+keys emitted in alphabetical order; the v1 reader rejects
+`schemaVersion = 2` (forward-compat constraint per addendum N16).
+The manifest's `atlasBinaryHash` field MUST equal the actual SHA-256
+of `assets/atlas.png` (asserted by the loader at startup and by the
+build's drift gate).
+
+**`rulesetVersion` derivation.**
+
+```
+rulesetTextHash = sha256(
+  for each (path, content) in RULES_FILES.sort_by_path_alphabetical():
+    utf8(path) ‖ 0x00 ‖ sha256(normalizeForHash(content)) ‖ 0x00
+)
+
+normalizeForHash(content) = utf8( stripBom(content).replace(/\r\n/g, "\n") )
+
+rulesetVersion = sha256( utf8(rulesetTextHashHex) ‖ utf8("|") ‖ utf8(atlasBinaryHash) )
+```
+
+The pre-image is the alphabetically-sorted concatenation of
+`(utf8(path), 0x00, sha256(normalizeForHash(content)), 0x00)` tuples
+(addendum B2). Properties that hold *by construction*:
+1. **Renaming a file is a `rulesetVersion` bump** — path bytes feed
+   the pre-image directly.
+2. **Splitting a file is a `rulesetVersion` bump** — the new
+   `(path, hash)` tuple appears.
+3. **Reordering `RULES_FILES` does not change the hash** — the sort is
+   canonical alphabetical (and reordering the array literal is itself
+   a *test failure*, not a `rulesetVersion` bump).
+4. **CRLF→LF is applied at hash time** — defense-in-depth above
+   `.gitattributes`.
+5. **Leading UTF-8 BOM is stripped** — defends against the
+   VSCode-Windows-edits-with-BOM trap.
+
+`atlasBinaryHash` is computed by the Vite plugin
+(`scripts/vite-plugin-atlas-binary-hash.mjs`, addendum B5):
+`configResolved` reads `assets/atlas.png` and computes
+`sha256(bytes)`; `config` exposes `__ATLAS_BINARY_HASH__` and
+`__ATLAS_MISSING__` to the `define` block (each wrapped in
+`JSON.stringify` per addendum N17); `handleHotUpdate` triggers a
+`full-reload` on regen in dev mode. The empty-atlas fallback (4.A.1)
+is `__ATLAS_BINARY_HASH__ =
+"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"`
+(SHA-256 of the empty byte string) and `__ATLAS_MISSING__ = true`.
+
+The `deriveRulesetVersion(rulesText, atlasBinaryHash)` helper is
+**defined but not yet called** at the `define`-block site in Phase
+4.A.1 (addendum B1). 4.A.2 lands `assets/atlas.png` AND flips the
+call sites from `PLACEHOLDER_RULESET_VERSION` to the derived value
+**in the same commit**. There is no transient sentinel — on master,
+exactly one of two states holds: the placeholder (pre-4.A.2) or a
+64-char lowercase-hex string (4.A.2 onward). No third form is
+allowed.
+
+**Atlas-loader `DEV-` refusal and hash check.** The runtime
+atlas-loader (Phase 4.A.2, `src/render/atlas-loader.ts`) refuses to
+load any build whose `rulesetVersion === PLACEHOLDER_RULESET_VERSION`
+with the exact message:
+
+```
+atlas-loader: refusing to load build with placeholder ruleset (DEV- fingerprint) — re-build with 'npm run build' to inject the real rulesetVersion
+```
+
+(addendum N7 — em-dash is U+2014, exact-character-match.) When
+`__ATLAS_MISSING__` is true at load time, the loader throws:
+
+```
+atlas-loader: assets/atlas.png is missing from this build — ruleset derivation cannot complete
+```
+
+The hash check uses `@noble/hashes/sha256` — never `crypto.subtle`,
+never `node:crypto` (addendum B4).
+
+**`ATLAS_DIGEST` golden constant.** SHA-256 of the canonical
+recipe-output sequence under `ATLAS_SEED_DEFAULT`. Pinned in
+`src/core/self-test.ts` next to `RANDOM_WALK_DIGEST`,
+`MAPGEN_DIGEST`, and `SIM_DIGEST`. Three new self-tests gate the
+atlas pipeline:
+- `atlas-cross-runtime-digest` — `ATLAS_DIGEST` matches in Node and
+  in `vite preview`-served browsers.
+- `atlas-stream-isolation` — fresh streams + one
+  `streams.atlas("atlas-recipe.cyberpunk.tile.floor")` call →
+  `__consumed.size === 1` and the key is `"atlas:" + recipeId`
+  (addendum B8).
+- `atlas-encoder-cross-runtime` — a hardcoded 16×16 single-color
+  tile, encoded via `src/atlas/png.ts`, hashes to a pinned golden
+  hex across all runtimes (addendum B4).
+
+**`src/atlas/**` layer-table entry.** New peer of `src/sim/` and
+`src/mapgen/` (no float, no time, no async). Layer constraints:
+
+| Layer | Imports allowed | Imports forbidden |
+|---|---|---|
+| `src/atlas/` | `src/core/`, `src/registries/` | `src/sim/`, `src/mapgen/`, `src/render/`, `src/input/`, `src/main`; `node:buffer`, `crypto`, `node:crypto` (use `@noble/hashes/sha256` via `src/core/hash`); `Buffer` global; `crypto.subtle` member access |
+
+`src/atlas/seed.ts` exports `atlasSeedToBytes`; consumed by
+`tools/gen-atlas.ts`, `src/atlas/generate.ts`, and `src/main.ts`
+(preview UI). It imports `sha256`, `utf8`, `concat`,
+`isWellFormedUtf16` from `src/core/hash`. The `Uint8Array`-only
+discipline (no `Buffer`, no `Buffer.concat`) and the
+`@noble/hashes/sha256`-only SHA-256 path are both lint-enforced; see
+the lint-rule inventory below.
+
+**`tools/**` `node:` prefix on Node built-ins.** `tools/gen-atlas.ts`
+(and any future `tools/**` script that imports a Node built-in) MUST
+use the `node:` prefix — `node:fs`, `node:path`, `node:url` — never
+the bare `fs`/`path`/`url` form (which resolves through Vite's
+resolver and can collide with a mod's local module). The lint message
+is pinned: `node-builtin: use 'node:fs' (or 'node:path', etc.); the
+bare form resolves through Vite's resolver and can collide with a
+mod's local module.` (addendum N10).
+
+**Deferred Phase 4 contracts.**
+- The four preset-seed `expectedHash` golden constants
+  (`placeholder`, `variant-A`, `variant-B`, `variant-C`) are computed
+  during 4.A.2 on the `ubuntu-latest` shard and pasted into
+  `src/atlas/preset-seeds.ts` literally before the live deploy is
+  approved (addendum N12).
+- The cross-OS byte-equality CI matrix (`ubuntu-latest`,
+  `macos-latest`, `windows-latest`; `node-version: '20.x'`;
+  `fail-fast: false`) lands in Phase 4.B (addendum N14).
+- Animation-frame manifest (`schemaVersion = 2`) is deferred to
+  Phase 9; the v1 reader must reject `schemaVersion = 2` per addendum
+  N16.
+- Atlas-recipe mod loader runtime semantics: a future mod-supported
+  release runs `npm run gen-atlas` at mod-install time and produces a
+  *new* `assets/atlas.png` with a *new* `atlasBinaryHash` folded into
+  a *new* `rulesetVersion` (addendum N13).
+
 ### Build-time constants
 
 `commitHash` and `rulesetVersion` are injected via Vite `define`. They
@@ -438,12 +696,14 @@ unit tests).
 
 | Rule | Scope | Implementation |
 |---|---|---|
-| no `Math.random` | `src/core/**`, `src/sim/**`, `src/mapgen/**` | `no-restricted-syntax` selector |
-| no `Date.now`, `performance.now`, `new Date()` | `src/core/**`, `src/sim/**`, `src/mapgen/**` | `no-restricted-syntax` selectors and `no-restricted-globals` |
+| no `Math.random` | `src/core/**`, `src/sim/**`, `src/mapgen/**`, `src/atlas/**` | `no-restricted-syntax` selector |
+| no `Date.now`, `performance.now`, `new Date()` | `src/core/**`, `src/sim/**`, `src/mapgen/**`, `src/atlas/**` | `no-restricted-syntax` selectors and `no-restricted-globals` |
 | no `for..in`, no iteration over `Map`/`Set`/`Object.entries`/`Object.keys`/`Object.values` without `sortedEntries(...)` | `src/sim/**`, `src/mapgen/**` | `no-restricted-syntax` selectors |
 | no float arithmetic | `src/sim/**`, `src/mapgen/**` | custom rule `eslint-rules/no-float-arithmetic.cjs` (see decision memo addendum B6 for full contract) |
 | no `JSON.parse` | `src/sim/**`, `src/mapgen/**` | custom rule `eslint-rules/no-float-arithmetic.cjs` (data ingestion at boundaries only) |
 | no member-access on `.sim` or `.ui` | `src/mapgen/**` | `no-restricted-syntax` selector — stream-isolation contract (memo decision 7); enforces that mapgen consumes only `streams.mapgen(floorN)` |
+| no `Buffer`, `node:buffer`, `crypto`, `node:crypto`, `crypto.subtle` | `src/atlas/**` | `no-restricted-imports` paths + `no-restricted-globals` + `no-restricted-syntax` member-access selector — Phase 4 addendum B4; encoder uses `Uint8Array` and `@noble/hashes/sha256` only |
+| no bare `fs`/`path`/`url` (must use `node:` prefix) | `tools/**` | `no-restricted-imports` paths — Phase 4 addendum N10; bare form resolves through Vite's resolver and can collide with a mod's local module |
 | `tools/**` boundary | `tools/**` | `no-restricted-imports` forbids `**/render/**`, `**/input/**`, `**/main` — Node-only build-time code |
 | import boundaries | per layer table above | `no-restricted-imports` patterns scoped via `overrides` |
 

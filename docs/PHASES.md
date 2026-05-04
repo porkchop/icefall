@@ -196,7 +196,7 @@ For each phase the doc lists: **Goal**, **Lead agent**, **Reviewers**, **Deliver
 > Phase 4 is split into **Phase 4.0** (planning gate — decision memo +
 > red-team review + addendum resolving B1–B8), **Phase 4.A.1**
 > (drift-detection sweep — Phase 3.A.2 code-review carry-forwards +
-> `uniformIndex` relocation to `src/core/prng.ts` + `fdeflate`
+> `uniformIndex` relocation to `src/core/prng.ts` + `fflate`
 > devDependency exact-pinned + `.gitattributes` with `assets/atlas.png
 > binary` + LF normalization + `tests/build/rules-text.test.ts`
 > CRLF/BOM scan + `vite-plugin-atlas-binary-hash` scaffolding with
@@ -248,7 +248,7 @@ For each phase the doc lists: **Goal**, **Lead agent**, **Reviewers**, **Deliver
 **Acceptance criteria — Phase 4.A.1 (drift-detection sweep).**
 - Phase 3.A.2 code-review carry-forwards (if any) landed.
 - `uniformIndex` relocated from `src/sim/run.ts` to `src/core/prng.ts`; focused unit tests cover termination, unbiased distribution, and `n=1` boundary; 100% line / branch / function coverage on `src/core/prng.ts` preserved.
-- `fdeflate` devDependency added to `package.json` (exact-pinned; no caret, no tilde); `package-lock.json` `integrity` hash recall flagged in the `architecture-red-team` checklist (addendum N1).
+- `fflate` devDependency added to `package.json` (exact-pinned; no caret, no tilde); `package-lock.json` `integrity` hash recall flagged in the `architecture-red-team` checklist (addendum N1). Note: the addendum text named this dependency `fdeflate`, which does not exist on the npm registry — `fflate` is the actual canonical pure-JS sync deterministic deflate library and is the equivalent the addendum's encoder discipline (level pinning, deterministic IDAT output, no native code) was specifying. See decision-memo-phase-4.md addendum-2 (Phase 4.A.1 implementation discovery) for the substitution rationale.
 - `.gitattributes` created at the repo root with the byte-exact content pinned in addendum B3 (includes `assets/atlas.png binary` and `* text=auto eol=lf`).
 - `tests/build/rules-text.test.ts` added; asserts every entry of `RULES_FILES` (addendum B2) has LF endings and no UTF-8 BOM, with the pinned error-message format.
 - `vite-plugin-atlas-binary-hash` scaffolding added in `scripts/vite-plugin-atlas-binary-hash.mjs`; the plugin is wired into both `vite.config.ts` and `vitest.config.ts`; with `assets/atlas.png` absent, the plugin injects `__ATLAS_BINARY_HASH__ = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"` (the SHA-256 of the empty byte string) and `__ATLAS_MISSING__ = true` via `JSON.stringify` (addendum B5, N17).

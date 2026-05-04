@@ -17,7 +17,7 @@ import { genesis } from "../core/state-chain";
 import type { Floor } from "../mapgen/types";
 import type { FingerprintInputs } from "../core/fingerprint";
 import type { RunStreams } from "../core/streams";
-import type { PRNG } from "../core/prng";
+import { uniformIndex } from "../core/prng";
 import {
   eligibleMonstersForFloor,
   getMonsterKind,
@@ -35,26 +35,6 @@ import type {
 const PLAYER_INITIAL_HP_MAX = 30;
 const PLAYER_INITIAL_ATK = 5;
 const PLAYER_INITIAL_DEF = 2;
-
-/**
- * Rejection-sampled uniform integer in `[0, n)`. Integer-only — no
- * `Math.floor`, no `/`. The largest u32 with `(m + 1)` divisible by
- * `n` is `m = 0xFFFFFFFF - tail` where
- * `tail = ((0xFFFFFFFF % n) + 1) % n`.
- *
- * For `n` ≤ ~10 the rejection probability is < 1e-8 per draw; for
- * non-power-of-two `n` it's bounded by `n / 2^32`.
- */
-export function uniformIndex(prng: PRNG, n: number): number {
-  if (!Number.isInteger(n) || n <= 0) {
-    throw new Error(`uniformIndex: n must be positive integer (got ${n})`);
-  }
-  const tail = ((0xffffffff % n) + 1) % n;
-  const m = (0xffffffff - tail) >>> 0;
-  let r = prng() >>> 0;
-  while (r > m) r = prng() >>> 0;
-  return r % n;
-}
 
 /** Build the initial `Player` at the floor entrance. */
 export function makeInitialPlayer(floor: Floor): Player {

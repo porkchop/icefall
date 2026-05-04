@@ -3082,3 +3082,50 @@ amended. The red-team is not re-invoked unless a Phase 4.A.1 or
 4.A.2 commit deviates from the above; deviations require either
 (a) a new addendum entry here or (b) a `phase-update.json`
 artifact pausing the phase for re-review.
+
+---
+
+## Addendum-2 (Phase 4.A.1 implementation discovery): `fdeflate` → `fflate`
+
+> Discovered during Phase 4.A.1 implementation (2026-05-04). The
+> addendum above (B5, N1, N2) and the `decision-memo-phase-4.md`
+> body (decision 4) name the deflate library as **`fdeflate`**.
+> `npm view fdeflate` returns HTTP 404 — the package does not exist
+> on the public npm registry. `fflate` (https://www.npmjs.com/package/fflate)
+> is the canonical pure-JS, sync, deterministic deflate library that
+> matches every property the addendum's encoder discipline was
+> specifying: pure JS (no native code, no Node-vs-browser branch),
+> exact-pinnable, sync API, deterministic level-1 output, ESM, small
+> footprint (~30 KB minified — slightly larger than the addendum's
+> "≈ 8 KB" estimate but the only viable substitute on the registry).
+>
+> **Resolution adopted in Phase 4.A.1:** `fflate@0.8.2` is added as
+> the exact-pinned devDependency in place of the non-existent
+> `fdeflate`. All discipline pinned in addendum-1 B5 / N1 / N2
+> (level pinning, deterministic IDAT output, no native code,
+> integrity-hash recall on version bumps, cross-OS-matrix-rerun on
+> any version-line change in `package-lock.json`) applies unchanged
+> to `fflate`.
+>
+> **Docs synchronized in this same Phase 4.A.1 commit:**
+> `docs/PHASES.md:199,251`, `docs/ATLAS_GENERATOR.md:63,121,206`,
+> `docs/ARCHITECTURE.md:528` all rewritten from `fdeflate` to
+> `fflate` with an explanatory parenthetical noting the substitution.
+> The decision-memo body (decision 4) and the addendum-1 (B5, N1, N2)
+> are preserved as historical record of the planning-gate output;
+> readers should treat any `fdeflate` reference in those sections as
+> "the encoder library subsequently re-pinned to `fflate` per
+> addendum-2." Addendum-1 N2's "version-bump → cross-OS-matrix-rerun"
+> rule binds the version-pin discipline to whatever package name is
+> live in `package.json`; the rule itself is untouched.
+>
+> **Phase 4.A.2 implication:** the PNG encoder in `src/atlas/png.ts`
+> will import from `fflate` (specifically `fflate`'s sync deflate
+> entrypoint at level 1 for deterministic output). Addendum-1 B4's
+> `atlas-encoder-cross-runtime` self-test gains an `fflate` version
+> assertion in `package.json` to surface any silent re-pin.
+>
+> **No fingerprint-bump risk** — Phase 4 has not yet shipped any
+> atlas, so no `atlasBinaryHash` and no live `rulesetVersion` are
+> built on `fdeflate` output. The substitution is invisible to
+> external observers.

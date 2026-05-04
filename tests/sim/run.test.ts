@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
-  uniformIndex,
   spawnFloorEntities,
   makeInitialPlayer,
   makeInitialRunState,
   applyFloorEntry,
 } from "../../src/sim/run";
+import { uniformIndex } from "../../src/core/prng";
 import { streamsForRun, type RunStreams } from "../../src/core/streams";
 import { seedToBytes } from "../../src/core/seed";
 import { generateFloor } from "../../src/mapgen/index";

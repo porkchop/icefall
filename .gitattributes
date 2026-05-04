@@ -1,0 +1,21 @@
+# Phase 4 cross-OS byte-equality discipline. See
+# artifacts/decision-memo-phase-4.md addendum B3.
+* text=auto eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+*.js text eol=lf
+*.mjs text eol=lf
+*.cjs text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.html text eol=lf
+*.css text eol=lf
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.ico binary
+assets/atlas.png binary
+assets/atlas.json text eol=lf
