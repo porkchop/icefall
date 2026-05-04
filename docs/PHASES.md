@@ -439,6 +439,66 @@ For each phase the doc lists: **Goal**, **Lead agent**, **Reviewers**, **Deliver
 
 ## Phase 7 — NPCs, Shops, Boss
 
+> **Phase 7 split.** Per `artifacts/phase-update.json` (the
+> phase-update artifact recording the split decision after Phase 6.B's
+> live deploy + cross-OS matrix verified Phase 6 end-to-end), Phase 7
+> is split into **Phase 7.A.1** (drift-detection sweep — Phase 6.A.2
+> cosmetic carry-forwards from `artifacts/code-review-phase-6-A-2.md`
+> addressed where they touch files Phase 7.A.2 will modify
+> (specifically N4: the 3 Phase 3 items that lack atlas recipes —
+> `item.stim-patch`, `item.trauma-pack`, `item.cyberdeck-mod-1` — are
+> a latent renderer-throw and Phase 7's shop NPCs may stock them, so
+> the recipes land in 7.A.1 to remove the latent risk before 7.A.2's
+> NPC content goes live; N1, N2, N3, N5 are non-blocking and may be
+> folded into 7.A.2 implementation if the corresponding files are
+> touched); ARCHITECTURE.md updated with Phase 7 frozen contracts
+> (NPC data shape, shop interaction action vocabulary additions, boss
+> FSM contract with deterministic phase transitions, boss-room spawn
+> contract on floor 10, win-state transition, atlas extension
+> coordinate-stable per addendum 3a)), **Phase 7.A.2**
+> (sandbox-verifiable implementation: NPC + boss types in
+> `src/sim/types.ts`; new Action descriptors for shop interactions
+> (`talk`/`buy`/`sell` or analogous, additive to the Phase 1 schema;
+> reuse existing TAG_* tags); `src/registries/npcs.ts` with ~3 NPC
+> types (ripperdoc, fixer, info-broker); `tick()` extended to handle
+> NPC interactions with deterministic shop transactions (rollBytes
+> with new domain anchors for stock generation, price variance);
+> boss entity in `src/sim/types.ts` Monster extension with FSM
+> phase tracking; boss room override at floor 10 (extends the
+> existing Phase 2 `bossArena` slot); ~4 new atlas recipes (3 NPCs +
+> boss) plus the 3 missing Phase 3 item recipes from the N4
+> carry-forward = 7 new atlas recipes total; `assets/atlas.png`
+> regenerated and `ATLAS_DIGEST` golden bumped; 4 preset-seed
+> `expectedHash` values bumped; new BOSS_DIGEST cross-runtime
+> self-test (or extension to a WIN_DIGEST that pins a fingerprint
+> that buys → descends → defeats boss → wins); win-screen UI in
+> `src/ui/win-screen.ts` (read-only on RunState per Phase 5
+> contract; activates when `state.outcome === "won"`); win-state
+> reachability test asserting the scripted run produces a pinned
+> final state hash), and **Phase 7.B** (live GitHub Pages
+> verification — cross-runtime Playwright on
+> chromium/firefox/webkit asserting the buy → descend → defeat-boss
+> scripted sequence produces a pinned final state hash; the Phase
+> 4.B `cross-os-atlas-equality` matrix re-runs against the new
+> atlas binary; CI fails if the checked-in atlas is stale).
+> Phase 8 cannot begin until all three are approved. Phase 7 is
+> **not** a planning-gate phase per the policy at the top of this
+> document, so no `decision-memo-phase-7.md` is required; the
+> X.A.1/X.A.2/X.B decomposition is the established pattern from
+> Phases 3 / 4 / 5 / 6 and is recorded in the phase-update artifact
+> rather than a planning memo. Material design choices (NPC
+> representation: separate `RunState.npcs` collection vs. extending
+> `floorState.monsters` with a `kind: "npc"` discriminator; shop
+> transaction model: synchronous single-action with `target`/`item`
+> tags vs. multi-action open-trade flow; boss FSM phase count and
+> transition triggers; deterministic stock generation via
+> `streams.npcStock(npcId)` accessor or per-action rollBytes) are
+> resolved during Phase 7.A.1's drift sweep via a brief
+> strategy-planner pass if the implementation surfaces multiple
+> plausible options; the output (if any) lives in the
+> ARCHITECTURE.md Phase 7 section rather than a separate decision
+> memo.
+
 **Goal.** Fill the dungeon with social and climactic content. Ripperdoc and fixer NPCs that trade eddies for gear or upgrades. A real boss fight on floor 10. Atlas recipes for NPCs and the boss.
 
 **Lead agent.** `engine-builder` (rules), `frontend-builder` (UI)
@@ -451,11 +511,23 @@ For each phase the doc lists: **Goal**, **Lead agent**, **Reviewers**, **Deliver
 - Atlas recipes for ~3 NPC types and the boss
 - Win screen with shareable fingerprint
 
-**Acceptance criteria.**
+**Acceptance criteria — Phase 7.A.1 (drift-detection sweep).**
+- The 3 Phase 3 items that lack atlas recipes (item.stim-patch, item.trauma-pack, item.cyberdeck-mod-1) gain atlas recipes (Phase 6.A.2 code-review nit N4); the renderer's latent-throw risk on floor-spawning those items is closed before Phase 7's shop NPCs may stock them. Atlas regenerates with the 3 new sprites; ATLAS_DIGEST + 4 preset-seed expectedHash values bumped accordingly. Existing 23 sprite coordinates remain byte-identical per addendum 3a coordinate-stability.
+- Phase 6.A.2 cosmetic carry-forwards N1/N2/N3/N5 addressed where they touch files Phase 7.A.2 will modify (e.g., if 7.A.2 modifies inventory.ts for shop transactions, the N1+N2 inventory test gaps are closed there).
+- `docs/ARCHITECTURE.md` updated with Phase 7 frozen contracts (NPC data shape, shop action vocabulary additions with byte-explicit wire format per Phase 1 frozen contract, deterministic shop-transaction resolution path, boss FSM contract with phase transitions, boss-room spawn override, win-state transition).
+- `npm ci && npm run lint && npm run test && npm run build` all green inside the sandbox, with no net-new NPC / shop / boss-FSM code.
+
+**Acceptance criteria — Phase 7.A.2 (sandbox-verifiable implementation).**
 - A scripted run on a fixed fingerprint can: buy an upgrade from a ripperdoc, descend to floor 10, and defeat the boss.
-- Win-state transition is reachable and replayable.
-- All shop transactions are resolved deterministically from the state hash (no `Math.random` for stock generation, etc.).
+- Win-state transition is reachable and replayable (asserted by a new test that runs the scripted log, asserts `outcome === "won"`, replays the same log from genesis, asserts byte-identical final state).
+- All shop transactions are resolved deterministically from the state hash (no `Math.random` for stock generation; use rollBytes with new domain anchors).
+- The deployed page's existing diagnostic + playable + inventory surfaces continue to render so the cross-runtime Playwright suite from Phases 1.B/2.B/3.B/4.B/5.B/6.B keeps passing alongside the new NPC/shop/boss UI and the bumped `ATLAS_DIGEST` + preset-seed `expectedHash` values.
+- `npm ci && npm run lint && npm run test && npm run build && npm run test:e2e` all green inside the sandbox.
+
+**Acceptance criteria — Phase 7.B (live-deploy + cross-runtime + cross-OS verification).**
 - The full game is playable end-to-end on the deployed URL (ugly art still acceptable until Phase 9).
+- The Phase 7.B Playwright job exercises the buy → descend → defeat-boss scripted sequence on chromium/firefox/webkit on a fixed seed and asserts the final state hash matches a pinned golden hex value.
+- The Phase 4.B `cross-os-atlas-equality` matrix re-runs against the new atlas binary and reports green on all three OSes (drift on macOS or Windows is a Phase 7.B blocker requiring a phase-update).
 
 ---
 
