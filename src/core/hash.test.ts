@@ -4,10 +4,12 @@ import {
   sha256Hex,
   sha256B64Url,
   base64url,
+  decodeBase64Url,
   utf8,
   concat,
   isWellFormedUtf16,
 } from "./hash";
+import { streamPrng } from "./streams";
 
 describe("sha256", () => {
   it("matches NIST FIPS 180-4 vector for 'abc'", () => {
@@ -63,6 +65,89 @@ describe("base64url", () => {
     const enc = base64url(d);
     expect(enc.length).toBe(43);
     expect(enc).toMatch(/^[A-Za-z0-9_-]+$/);
+  });
+});
+
+describe("decodeBase64Url", () => {
+  it("decodes empty string to empty array (r=0 trivial branch)", () => {
+    expect(decodeBase64Url("").length).toBe(0);
+  });
+
+  it("decodes r=2 input (1 output byte)", () => {
+    expect(Array.from(decodeBase64Url("_w"))).toEqual([0xff]);
+  });
+
+  it("decodes r=3 input (2 output bytes)", () => {
+    expect(Array.from(decodeBase64Url("__8"))).toEqual([0xff, 0xff]);
+  });
+
+  it("decodes r=0 full-quad input (3 output bytes per quad)", () => {
+    expect(Array.from(decodeBase64Url("____"))).toEqual([0xff, 0xff, 0xff]);
+  });
+
+  it("rejects r=1 (illegal length)", () => {
+    expect(() => decodeBase64Url("AAAAA")).toThrow(
+      /illegal length \(mod 4 == 1\)/,
+    );
+  });
+
+  it("rejects characters outside the base64url alphabet (e.g. '+')", () => {
+    expect(() => decodeBase64Url("AA+A")).toThrow(/invalid base64url char code/);
+  });
+
+  it("rejects characters outside the base64url alphabet (e.g. '/')", () => {
+    expect(() => decodeBase64Url("AA/A")).toThrow(/invalid base64url char code/);
+  });
+
+  it("rejects characters outside the base64url alphabet (e.g. '=' padding)", () => {
+    expect(() => decodeBase64Url("AAA=")).toThrow(/invalid base64url char code/);
+  });
+
+  it("rejects high-codepoint characters (charCodeAt > 127)", () => {
+    expect(() => decodeBase64Url("AA☃A")).toThrow(/invalid base64url char code/);
+  });
+
+  it("round-trips empty bytes", () => {
+    expect(Array.from(decodeBase64Url(base64url(new Uint8Array(0))))).toEqual([]);
+  });
+
+  it("round-trips 1-byte input (exercises r=2)", () => {
+    const bytes = new Uint8Array([0x42]);
+    expect(Array.from(decodeBase64Url(base64url(bytes)))).toEqual([0x42]);
+  });
+
+  it("round-trips 2-byte input (exercises r=3)", () => {
+    const bytes = new Uint8Array([0x42, 0x73]);
+    expect(Array.from(decodeBase64Url(base64url(bytes)))).toEqual([0x42, 0x73]);
+  });
+
+  it("round-trips 3-byte input (full quad, exercises r=0)", () => {
+    const bytes = new Uint8Array([0x42, 0x73, 0xa1]);
+    expect(Array.from(decodeBase64Url(base64url(bytes)))).toEqual([
+      0x42, 0x73, 0xa1,
+    ]);
+  });
+
+  it("round-trips a 32-byte SHA-256 digest", () => {
+    const d = sha256(utf8("abc"));
+    expect(Array.from(decodeBase64Url(base64url(d)))).toEqual(Array.from(d));
+  });
+
+  it("round-trips 50 deterministic random byte arrays of varied lengths", () => {
+    const rootSeed = sha256(utf8("phase-3-A-1:b64-property-test"));
+    const prng = streamPrng(rootSeed, "test:b64");
+    for (let trial = 0; trial < 50; trial++) {
+      const len = (prng() >>> 0) % 100;
+      const bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i++) {
+        bytes[i] = (prng() >>> 0) & 0xff;
+      }
+      const round = decodeBase64Url(base64url(bytes));
+      expect(round.length).toBe(bytes.length);
+      for (let i = 0; i < bytes.length; i++) {
+        expect(round[i]).toBe(bytes[i]);
+      }
+    }
   });
 });
 

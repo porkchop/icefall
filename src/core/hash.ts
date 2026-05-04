@@ -49,6 +49,63 @@ export function sha256B64Url(bytes: Uint8Array): string {
   return base64url(sha256(bytes));
 }
 
+const B64URL_REVERSE: Int16Array = (() => {
+  const table = new Int16Array(128).fill(-1);
+  for (let i = 0; i < B64URL_ALPHABET.length; i++) {
+    table[B64URL_ALPHABET.charCodeAt(i)] = i;
+  }
+  return table;
+})();
+
+// `c >= 128` is the bounds guard — short-circuits before the typed-array
+// read so an out-of-range char code never silently returns `undefined`.
+function b64urlLookup(c: number): number {
+  if (c >= 128 || B64URL_REVERSE[c]! < 0) {
+    throw new Error(`decodeBase64Url: invalid base64url char code ${c}`);
+  }
+  return B64URL_REVERSE[c]!;
+}
+
+/**
+ * RFC 4648 §5 base64url decode, unpadded. Inverse of `base64url`.
+ * Length `r = s.length mod 4` may be 0, 2, or 3 (1 is illegal).
+ *
+ * Frozen contract — see Phase 3 decision memo addendum B6 for the
+ * relocation from `src/mapgen/serialize.ts`.
+ */
+export function decodeBase64Url(s: string): Uint8Array {
+  const r = s.length & 3;
+  if (r === 1) {
+    throw new Error("decodeBase64Url: illegal length (mod 4 == 1)");
+  }
+  const fullQuads = (s.length - r) >> 2;
+  const outLen = fullQuads * 3 + (r === 0 ? 0 : r === 2 ? 1 : 2);
+  const out = new Uint8Array(outLen);
+  let outOff = 0;
+
+  for (let i = 0; i < fullQuads; i++) {
+    const a = b64urlLookup(s.charCodeAt(i * 4 + 0));
+    const b = b64urlLookup(s.charCodeAt(i * 4 + 1));
+    const c = b64urlLookup(s.charCodeAt(i * 4 + 2));
+    const d = b64urlLookup(s.charCodeAt(i * 4 + 3));
+    out[outOff++] = ((a << 2) | (b >> 4)) & 0xff;
+    out[outOff++] = ((b << 4) | (c >> 2)) & 0xff;
+    out[outOff++] = ((c << 6) | d) & 0xff;
+  }
+  if (r === 2) {
+    const a = b64urlLookup(s.charCodeAt(fullQuads * 4 + 0));
+    const b = b64urlLookup(s.charCodeAt(fullQuads * 4 + 1));
+    out[outOff++] = ((a << 2) | (b >> 4)) & 0xff;
+  } else if (r === 3) {
+    const a = b64urlLookup(s.charCodeAt(fullQuads * 4 + 0));
+    const b = b64urlLookup(s.charCodeAt(fullQuads * 4 + 1));
+    const c = b64urlLookup(s.charCodeAt(fullQuads * 4 + 2));
+    out[outOff++] = ((a << 2) | (b >> 4)) & 0xff;
+    out[outOff++] = ((b << 4) | (c >> 2)) & 0xff;
+  }
+  return out;
+}
+
 const utf8Encoder = new TextEncoder();
 
 export function utf8(s: string): Uint8Array {

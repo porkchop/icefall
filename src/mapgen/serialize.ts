@@ -14,7 +14,7 @@
  * mapgen and pass the resulting object in.
  */
 
-import { base64url } from "../core/hash";
+import { base64url, decodeBase64Url } from "../core/hash";
 import type { Door, Encounter, Floor, Point, Rect, Room } from "./types";
 import { TILE_CODE_MAX, TILE_CODE_MIN } from "./tiles";
 import { ROOM_KIND_IDS, type RoomKindId } from "../registries/rooms";
@@ -392,53 +392,3 @@ function parseRooms(v: unknown): Room[] {
   return out;
 }
 
-const B64URL_REVERSE = (() => {
-  const table = new Int16Array(128).fill(-1);
-  const alphabet =
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
-  for (let i = 0; i < alphabet.length; i++) {
-    table[alphabet.charCodeAt(i)] = i;
-  }
-  return table;
-})();
-
-function decodeBase64Url(s: string): Uint8Array {
-  // RFC 4648 §5 base64url, unpadded. Length r mod 4 may be 0, 2, or 3.
-  const r = s.length & 3;
-  if (r === 1) {
-    throw new Error("parseFloor: tilesB64 has illegal length (mod 4 == 1)");
-  }
-  const fullQuads = (s.length - r) >> 2;
-  const outLen = fullQuads * 3 + (r === 0 ? 0 : r === 2 ? 1 : 2);
-  const out = new Uint8Array(outLen);
-  let outOff = 0;
-
-  function lookup(c: number): number {
-    if (c >= 128 || B64URL_REVERSE[c]! < 0) {
-      throw new Error(`parseFloor: invalid base64url char code ${c}`);
-    }
-    return B64URL_REVERSE[c]!;
-  }
-
-  for (let i = 0; i < fullQuads; i++) {
-    const a = lookup(s.charCodeAt(i * 4 + 0));
-    const b = lookup(s.charCodeAt(i * 4 + 1));
-    const c = lookup(s.charCodeAt(i * 4 + 2));
-    const d = lookup(s.charCodeAt(i * 4 + 3));
-    out[outOff++] = ((a << 2) | (b >> 4)) & 0xff;
-    out[outOff++] = ((b << 4) | (c >> 2)) & 0xff;
-    out[outOff++] = ((c << 6) | d) & 0xff;
-  }
-  if (r === 2) {
-    const a = lookup(s.charCodeAt(fullQuads * 4 + 0));
-    const b = lookup(s.charCodeAt(fullQuads * 4 + 1));
-    out[outOff++] = ((a << 2) | (b >> 4)) & 0xff;
-  } else if (r === 3) {
-    const a = lookup(s.charCodeAt(fullQuads * 4 + 0));
-    const b = lookup(s.charCodeAt(fullQuads * 4 + 1));
-    const c = lookup(s.charCodeAt(fullQuads * 4 + 2));
-    out[outOff++] = ((a << 2) | (b >> 4)) & 0xff;
-    out[outOff++] = ((b << 4) | (c >> 2)) & 0xff;
-  }
-  return out;
-}

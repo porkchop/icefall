@@ -129,6 +129,23 @@ For each phase the doc lists: **Goal**, **Lead agent**, **Reviewers**, **Deliver
 
 ## Phase 3 — Entity Model, Turn Loop, Combat
 
+> **Phase 3 split.** Per `artifacts/decision-memo-phase-3.md` decision 14
+> and the attached `architecture-red-team` review (see
+> `artifacts/red-team-phase-3.md`), Phase 3 is split into **Phase 3.0**
+> (planning gate — decision memo + red-team review + addendum
+> resolving B1–B6), **Phase 3.A.1** (drift-detection sweep — Phase 2.A
+> code-review carry-forwards N7 decoder relocation + N3 gen-fixtures
+> unit test + ARCHITECTURE.md update referencing Phase 3 frozen
+> contracts), **Phase 3.A.2** (sandbox-verifiable sim implementation),
+> and **Phase 3.B** (live GitHub Pages verification, which requires an
+> external push). Phase 4 cannot begin until all four are approved.
+> Phase 3.0 introduces no new acceptance criteria of its own beyond
+> planning-gate compliance; Phase 3.A.1 is the no-net-new-sim drift
+> sweep that the addendum requires before sim implementation begins;
+> Phase 3.A.2 implements the sim per the decision memo's frozen
+> contracts; Phase 3.B re-verifies the diagnostic-page extension on
+> the live deployed URL.
+
 **Goal.** Headless simulation. The player and monsters move on the grid, take turns, and resolve combat against the state hash. No rendering; controlled by a synthetic input feeder for testing.
 
 **Lead agent.** `engine-builder`
@@ -142,11 +159,28 @@ For each phase the doc lists: **Goal**, **Lead agent**, **Reviewers**, **Deliver
 - A "headless playthrough" test harness: scripted action log → final state hash
 - Diagnostic page extended with a "run a scripted playthrough" button that exercises the harness in the live deployment
 
-**Acceptance criteria.**
-- A 100-action scripted run on a fixed fingerprint produces the same final state hash on every machine and across both Node and browser builds.
-- Combat outcomes are computed solely from `H(stateHash ‖ action)` — no other entropy enters the sim path (audited).
+**Acceptance criteria — Phase 3.0 (planning gate).**
+- `artifacts/decision-memo-phase-3.md` exists and was reviewed by `architecture-red-team` before any Phase 3 implementation code is written.
+- The red-team review at `artifacts/red-team-phase-3.md` exists; all six blocking issues (B1–B6) are addressed via an in-memo addendum that supersedes the original prose.
+- A follow-up `architecture-red-team` review of the addendum confirms blocker resolution (verdict APPROVE or APPROVE WITH NITS).
+
+**Acceptance criteria — Phase 3.A.1 (drift-detection sweep).**
+- Phase 2.A code-review carry-forward N7 — `decodeBase64Url` and `B64URL_REVERSE` relocated from `src/mapgen/serialize.ts` to `src/core/hash.ts` alongside the existing `base64url` encoder; `src/mapgen/serialize.ts` imports from `src/core/hash`; error-message prefix renamed to `decodeBase64Url:`; focused unit tests cover all `r mod 4 ∈ {0, 2, 3}` branches plus the `r === 1` reject path plus invalid-character path plus high-codepoint path plus empty round-trip plus 50-seed property round-trip; 100% line / branch / function coverage on `src/core/hash.ts` without relying on transitive coverage from `src/mapgen/**`.
+- Phase 2.A code-review carry-forward N3 — `tools/gen-fixtures.ts` has a focused unit test under `tests/tools/gen-fixtures.test.ts` covering `slug` rejection on non-alphanumeric input (via `fixturePathFor`), `generatePair` happy path including determinism + JSON round-trip + ASCII trailing-newline contract, and `readManifest` shape validation.
+- `docs/ARCHITECTURE.md` is updated to reference Phase 3's frozen contracts (action vocabulary, roll-derivation function, roll-domain registry, combat damage formula, player-id pin, turn order, AI zero-PRNG / zero-roll claim, `streams.simFloor(floorN)` accessor, per-tick `__consumed`-empty invariant, `RunState.outcome` set, `MAX_LOS_RADIUS = 8`, `SIM_DIGEST` golden constant, damage-clamp + short-circuit, plus deferred contracts: one-way descent, verifier trailing-after-terminal).
+- `npm ci && npm run lint && npm run test && npm run build` all green inside the sandbox, with no net-new `src/sim/**` code.
+
+**Acceptance criteria — Phase 3.A.2 (sandbox-verifiable sim implementation).**
+- A 100-action scripted run on a fixed `FingerprintInputs` produces the same final state hash on every machine and across both Node and browser builds (asserted by the new `sim-cross-runtime-digest` self-test against a hardcoded `SIM_DIGEST`).
+- Combat outcomes are computed solely from `H(stateHashPre ‖ encodeAction(action) ‖ "icefall:roll:v1:" ‖ lp(domain) ‖ u32_le(index))` — no other entropy enters the per-action sim path (asserted by the `sim-stream-isolation` self-test which verifies per-tick `__consumed` delta is empty).
 - Death and boss-kill state transitions are reachable via the test harness.
 - Replay invariant: any prefix of an action log replays to the same intermediate state.
+- All Phase 3 frozen contracts (decision memo addendum items 1–13) are implemented and have at least one regression-failing test.
+- `npm ci && npm run lint && npm run test && npm run build && npm run test:e2e` all green inside the sandbox.
+
+**Acceptance criteria — Phase 3.B (external verification, post-push).**
+- The live GitHub Pages URL serves the updated diagnostic page with the in-browser scripted-playthrough button working.
+- The Phase 3.B Playwright job exercises the scripted-playthrough button (click → assert `window.__SIM_FINAL_STATE_HASH__` equals the expected hex digest, assert `window.__SIM_OUTCOME__` is one of `running | dead | won`) on chromium, firefox, and webkit.
 
 **Risks.**
 - Object iteration order leaking nondeterminism — covered by a project-wide rule of using sorted arrays for any iterated collection in sim code.

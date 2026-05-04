@@ -289,6 +289,137 @@ exact value is passed to `fingerprint(...)`, the result is prefixed with
 atlasBinaryHash)`) and refuses to load any fingerprint that decodes to a
 `DEV-` prefix.
 
+### Phase 3 frozen contracts (entity model, turn loop, combat)
+
+These are the contract additions Phase 3.0's planning gate locks in;
+the canonical reference is `artifacts/decision-memo-phase-3.md` (with
+the addendum at the bottom resolving B1–B6 from the architecture
+red-team review). Implementation of these contracts lands in Phase
+3.A.2; the relocations they require for the foundation
+(`decodeBase64Url` co-located with `base64url`, focused unit-test
+coverage on `src/core/hash.ts`) land in Phase 3.A.1's drift-detection
+sweep.
+
+**Action type vocabulary (Phase 3 strings).** Phase 1's `Action`
+encoding is unchanged. Phase 3 adds these strings as legal values for
+`Action.type`:
+
+| `type`     | required fields | optional fields | purpose                            |
+|------------|------------------|------------------|------------------------------------|
+| `wait`     | (none)           | (none)           | pass turn; monsters still tick     |
+| `move`     | `dir`            | (none)           | step one cell in direction         |
+| `attack`   | `dir`            | (none)           | melee attack adjacent cell         |
+| `descend`  | (none)           | (none)           | descend stairs at floor exit       |
+
+Adding a `type` value is additive; removing or renaming one is a
+`rulesetVersion` bump.
+
+**Roll-derivation function.** Per-action combat entropy is derived as:
+
+```
+ROLL_DOMAIN_ANCHOR = utf8("icefall:roll:v1:")  // 16 bytes, fixed ASCII
+
+rollPreimage(stateHashPre, action, domain, index) =
+  stateHashPre                                 // 32 bytes
+  ‖ encodeAction(action)                       // Phase 1 wire format
+  ‖ ROLL_DOMAIN_ANCHOR                         // 16 bytes
+  ‖ [utf8(domain).length:1]                    // 1 byte
+  ‖ utf8(domain)                               // 1..31 bytes
+  ‖ DataView.setUint32(_, index, true)         // 4 bytes, LE u32
+
+rollBytes(...) = sha256(rollPreimage(...))     // 32 bytes
+rollU32(...)   = (b[0] | (b[1]<<8) | (b[2]<<16) | (b[3]<<24)) >>> 0
+                 where b = rollBytes(...)[0..4]
+```
+
+`domain` must be well-formed UTF-16, `1 ≤ utf8(domain).length ≤ 31`,
+and Phase 3's frozen domains are additionally 7-bit ASCII. `index` is
+`Number.isInteger && 0 ≤ index ≤ 2^32 - 1`. Sub-ranges of `rollU32` are
+extracted by **bitwise AND with a low-bit mask** (`& 0x03`, `& 0x0f`,
+…); high-bit shifts are not used. Future helpers (`rollU64`, etc.)
+consume non-overlapping byte ranges of the same per-call subhash and
+are pinned at point of introduction.
+
+**Roll-domain registry (Phase 3).** Frozen domain set:
+
+| domain                  | purpose                                           |
+|-------------------------|---------------------------------------------------|
+| `combat:atk-bonus`      | damage roll bonus on player-initiated attack     |
+| `combat:counter-bonus`  | damage roll bonus on monster counterattack       |
+
+Adding a domain is additive; removing or renaming a bump.
+
+**Combat damage formula.** `bonus = rollU32(stateHashPre, action,
+"combat:atk-bonus", 0) & 0x03 ∈ [0..3]`; `dmg = max(1, atk - def +
+bonus)`. Damage application clamps `target.hp = max(0, target.hp -
+dmg)`; on `target.hp === 0` the resolver short-circuits — no further
+rolls in the same action are computed, no entropy is consumed.
+
+**Player entity id pinned to 0.** Monster ids `1..N` are assigned in
+floor-entry spawn order and persist for the entity's life. `RunState`
+collections are sorted: `monsters` by `id`, `items` by `(y, x, kind)`.
+
+**Turn order.** One player action → resolve → monsters tick in
+ascending `id` order. The state hash advances exactly once per *player
+action*; monster decisions do not appear on the chain.
+
+**Monster AI is zero-PRNG and zero-roll inside a tick.** AI consults
+only the integer grid + integer attributes. BFS distance map is
+computed *from the player's position* with 8-connected adjacency; the
+monster picks the single adjacent walkable cell whose distance is one
+less than its own distance, breaking ties by the direction list **N,
+E, S, W, NE, SE, SW, NW** with `(dy, dx)` deltas where y increases
+southward (matching `tiles[y * width + x]` row-major addressing). The
+pinned `MAX_LOS_RADIUS = 8` BFS steps is the maximum at which a
+monster transitions to `chasing`. `bfsDistance(...)` returns the
+integer step count if reachable in `[0, MAX_LOS_RADIUS]`, else returns
+the integer sentinel `MAX_LOS_RADIUS + 1` — never `Infinity`, never
+`-1`, never a float.
+
+**`streams.simFloor(floorN)` accessor.** Added to `RunStreams`.
+`floorN` must satisfy `Number.isInteger(floorN) && 1 ≤ floorN ≤ 10`;
+violations throw `simFloor: floorN must be 1..10 (got N)`. Returns
+`streamPrng(rootSeed, "sim", floorN)` and records `"sim:" + floorN`
+into `__consumed`. The salt encoding `(name="sim", salts=[floorN])` is
+distinct from `streams.sim()`'s zero-salt pre-image — collision-free
+by construction (different total length, different tail bytes).
+
+**Per-tick `__consumed` delta is empty; floor-entry delta is exactly
+`{"mapgen:<floorN>", "sim:<floorN>"}`.** `tick(state, action): RunState`
+is a pure function of `RunState` and `Action`; it does not access
+`RunStreams`. Floor-entry spawn (`generateFloor` + `spawnFloorEntities`)
+happens in the run loop (`runScripted` and Phase 5+'s input-driven
+equivalent) outside `tick`. `src/sim/harness.ts` is the only file in
+`src/sim/**` permitted to import `generateFloor` from
+`src/mapgen/index.ts`; this exception is recorded in
+`eslint.config.js` and is expected to migrate to a dedicated
+`src/run/` layer in Phase 5+.
+
+**`RunState.outcome` ∈ {`running`, `dead`, `won`}.** Death detection
+is per-damage-application; once `outcome === "dead"`, subsequent
+actions in the harness's input log do not advance the chain and are
+discarded by `runScripted`'s `logLength` field. Adding a fourth
+outcome is additive iff existing transition rules are preserved.
+
+**`SIM_DIGEST` golden constant.** SHA-256 of the final state hash
+after running `SELF_TEST_LOG_100` against `SELF_TEST_INPUTS`. Pinned
+in `src/core/self-test.ts` next to `RANDOM_WALK_DIGEST` (Phase 1) and
+`MAPGEN_DIGEST` (Phase 2). The corresponding `sim-cross-runtime-digest`
+and `sim-stream-isolation` self-tests run in every runtime (Node,
+Chromium, Firefox, WebKit) and surface any silent cross-runtime drift
+as a single hex mismatch.
+
+**Deferred sim contracts.** Phase 3 ships **one-way descent** —
+the `wait | move | attack | descend` action vocabulary deliberately
+omits `ascend`. A future `ascend` is an additive vocabulary entry;
+whether re-entering a floor regenerates monsters or restores a
+preserved snapshot is a Phase 6+ decision. Phase 3 also defers the
+**verifier's trailing-after-terminal canonicalization** to Phase 8 —
+two action logs that differ only in trailing actions after a terminal
+outcome share the same fingerprint and the same `(finalState,
+finalStateHash, outcome)`; whether the verifier truncates or annotates
+trailing input is Phase 8's choice.
+
 ### Build-time constants
 
 `commitHash` and `rulesetVersion` are injected via Vite `define`. They
