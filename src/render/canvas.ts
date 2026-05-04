@@ -85,6 +85,16 @@ const SLOT_TILE_DOOR = "tile.door.cyberdoor";
 const SLOT_PLAYER = "player";
 const SLOT_MONSTER_DEFAULT = "monster.ice.daemon";
 
+/**
+ * Background fill color used to clear the canvas before tile blits.
+ * Pinned as a named constant per Phase 5.A.2 code-review carry-forward
+ * N1 (was an inline `"#000"` hidden constant). The void-black pixel
+ * matches the cyberpunk-neon-v1 palette's transparent slot's RGB
+ * (#000000), so void tiles read seamlessly against this background
+ * even before the atlas image is loaded.
+ */
+const CANVAS_BACKGROUND_COLOR = "#000";
+
 function tileCodeToSlot(code: number): string | null {
   if (code === TILE_VOID) return null;
   if (code === TILE_FLOOR) return SLOT_TILE_FLOOR;
@@ -147,7 +157,7 @@ export function drawScene(target: RenderTarget, state: RunState): void {
   ctx.imageSmoothingEnabled = false;
 
   // Clear before drawing so transparent (void) tiles read as background.
-  ctx.fillStyle = "#000";
+  ctx.fillStyle = CANVAS_BACKGROUND_COLOR;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   // Tiles.

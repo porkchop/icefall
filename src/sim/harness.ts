@@ -96,7 +96,7 @@ export function runScripted(args: RunScriptedArgs): RunScriptedResult {
         newFloor,
         streams,
       );
-      state = applyFloorEntry(state, newFloor, newFloorState);
+      state = applyFloorEntry(state, newFloorState);
     }
 
     const action = args.actions[i]!;

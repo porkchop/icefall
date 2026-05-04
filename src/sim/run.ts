@@ -152,14 +152,16 @@ export function makeInitialRunState(
 
 /**
  * Apply a floor-entry transition — called by the harness after `tick`
- * sets `__pendingFloorEntry = true` on a successful descend.
- * Generates a new floor (caller's responsibility), spawns entities,
- * places the player at the new floor's entrance, clears the pending
- * flag.
+ * sets `__pendingFloorEntry = true` on a successful descend. The new
+ * floor is read from `newFloorState.floor` (the FloorState invariant
+ * pins `floorState.floor` as the floor those entities live on), so a
+ * second `newFloor` parameter would be redundant and a misalignment
+ * surface (Phase 3.A.2 code-review carry-forward; landed in Phase
+ * 6.A.1's drift sweep ahead of Phase 6.A.2's inventory-state
+ * initialization in this same module).
  */
 export function applyFloorEntry(
   state: RunState,
-  newFloor: Floor,
   newFloorState: FloorState,
 ): RunState {
   return {
@@ -167,7 +169,10 @@ export function applyFloorEntry(
     floorState: newFloorState,
     player: {
       ...state.player,
-      pos: { y: newFloor.entrance.y, x: newFloor.entrance.x },
+      pos: {
+        y: newFloorState.floor.entrance.y,
+        x: newFloorState.floor.entrance.x,
+      },
     },
     __pendingFloorEntry: false,
   };

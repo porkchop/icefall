@@ -109,60 +109,80 @@ export function tick(state: RunState, action: Action): RunState {
   let pendingFloorEntry = false;
   let outcome: RunOutcome = state.outcome;
 
-  // Resolve player action.
-  if (action.type === ACTION_TYPE_WAIT) {
-    // pass
-  } else if (action.type === ACTION_TYPE_MOVE) {
-    const dir = action.dir;
-    if (dir !== undefined) {
-      const delta = DIR_DELTAS[dir]!;
-      const ny = player.pos.y + delta.dy;
-      const nx = player.pos.x + delta.dx;
+  // Resolve player action. Switch/case on action.type so Phase 6+
+  // additions register as explicit cases — Phase 3.A.2 carry-forward
+  // landed in 6.A.1 ahead of 6.A.2's pickup/drop/equip/unequip/use
+  // additions. The `default` no-op preserves the Phase 1 frozen
+  // "additive vocabulary" contract: an unknown type does NOT throw at
+  // runtime (so verifiers can replay logs that include
+  // forward-compatible types), but a Phase-N developer who forgets to
+  // wire a newly-added type into this switch will see the no-op
+  // immediately during dev-loop testing rather than chasing a silent
+  // missed-write later.
+  switch (action.type) {
+    case ACTION_TYPE_WAIT:
+      // pass
+      break;
+    case ACTION_TYPE_MOVE: {
+      const dir = action.dir;
+      if (dir !== undefined) {
+        const delta = DIR_DELTAS[dir]!;
+        const ny = player.pos.y + delta.dy;
+        const nx = player.pos.x + delta.dx;
+        if (
+          isPassable(floor, ny, nx) &&
+          !isMonsterAt(nextMonsters, ny, nx)
+        ) {
+          nextPlayer = {
+            ...player,
+            pos: { y: ny, x: nx },
+          };
+        }
+      }
+      break;
+    }
+    case ACTION_TYPE_ATTACK: {
+      const dir = action.dir;
+      if (dir !== undefined) {
+        const delta = DIR_DELTAS[dir]!;
+        const ny = player.pos.y + delta.dy;
+        const nx = player.pos.x + delta.dx;
+        const target = findMonsterAt(nextMonsters, ny, nx);
+        if (target !== undefined) {
+          const bonus = damageBonus(
+            stateHashPre,
+            action,
+            ROLL_DOMAIN_ATK_BONUS,
+            0,
+          );
+          const dmg = damageAmount(player.atk, target.def, bonus);
+          const newHp = clampHp(target.hp, dmg);
+          nextMonsters = nextMonsters.map((m) =>
+            m.id === target.id ? { ...m, hp: newHp } : m,
+          );
+        }
+      }
+      break;
+    }
+    case ACTION_TYPE_DESCEND: {
+      const exit = floor.exit;
       if (
-        isPassable(floor, ny, nx) &&
-        !isMonsterAt(nextMonsters, ny, nx)
+        state.floorN < 10 &&
+        exit !== null &&
+        isPlayerOn(player, exit.x, exit.y)
       ) {
-        nextPlayer = {
-          ...player,
-          pos: { y: ny, x: nx },
-        };
+        nextFloorN = state.floorN + 1;
+        pendingFloorEntry = true;
       }
+      break;
     }
-  } else if (action.type === ACTION_TYPE_ATTACK) {
-    const dir = action.dir;
-    if (dir !== undefined) {
-      const delta = DIR_DELTAS[dir]!;
-      const ny = player.pos.y + delta.dy;
-      const nx = player.pos.x + delta.dx;
-      const target = findMonsterAt(nextMonsters, ny, nx);
-      if (target !== undefined) {
-        const bonus = damageBonus(
-          stateHashPre,
-          action,
-          ROLL_DOMAIN_ATK_BONUS,
-          0,
-        );
-        const dmg = damageAmount(player.atk, target.def, bonus);
-        const newHp = clampHp(target.hp, dmg);
-        nextMonsters = nextMonsters.map((m) =>
-          m.id === target.id ? { ...m, hp: newHp } : m,
-        );
-      }
-    }
-  } else if (action.type === ACTION_TYPE_DESCEND) {
-    const exit = floor.exit;
-    if (
-      state.floorN < 10 &&
-      exit !== null &&
-      isPlayerOn(player, exit.x, exit.y)
-    ) {
-      nextFloorN = state.floorN + 1;
-      pendingFloorEntry = true;
-    }
+    default:
+      // Unknown action type — no-op per the additive-vocabulary
+      // contract (Phase 1 frozen contract; addendum decision 3). The
+      // Phase 1 binary encoding still accepts the action; verifiers
+      // may flag.
+      break;
   }
-  // Unknown action types are no-ops — Phase 1 binary encoding still
-  // accepts the action (verifier may flag), but the sim treats it as
-  // a wait. This is consistent with "additive vocabulary" (decision 3).
 
   // Detect win: floor-10 boss with hp == 0.
   if (state.floorN === 10 && nextFloorN === 10) {

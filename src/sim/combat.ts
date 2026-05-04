@@ -26,9 +26,8 @@
 
 import { sha256, utf8, concat, isWellFormedUtf16 } from "../core/hash";
 import { encodeAction, type Action } from "../core/encode";
-import { ROLL_DOMAIN_ANCHOR_TEXT } from "./params";
+import { ROLL_DOMAIN_ANCHOR_BYTES } from "./params";
 
-const ROLL_DOMAIN_ANCHOR: Uint8Array = utf8(ROLL_DOMAIN_ANCHOR_TEXT);
 const MAX_DOMAIN_BYTES = 31;
 const U32_MAX = 0xffffffff;
 
@@ -66,7 +65,7 @@ export function rollBytes(
     concat([
       stateHashPre,
       encodeAction(action),
-      ROLL_DOMAIN_ANCHOR,
+      ROLL_DOMAIN_ANCHOR_BYTES,
       lpDomain,
       idxLE,
     ]),

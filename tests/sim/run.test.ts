@@ -214,7 +214,7 @@ describe("makeInitialRunState + applyFloorEntry", () => {
     };
     const floor2 = generateFloor(2, streams);
     const fs2 = spawnFloorEntities(2, floor2, streams);
-    const state1 = applyFloorEntry(state0, floor2, fs2);
+    const state1 = applyFloorEntry(state0, fs2);
     expect(state1.__pendingFloorEntry).toBe(false);
     expect(state1.floorState.floor).toBe(floor2);
     expect(state1.player.pos).toEqual({

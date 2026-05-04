@@ -577,7 +577,7 @@ async function startGame(host: HTMLElement): Promise<void> {
     if (state.__pendingFloorEntry) {
       const newFloor = generateFloor(state.floorN, streams);
       const newFloorState = spawnFloorEntities(state.floorN, newFloor, streams);
-      state = applyFloorEntry(state, newFloor, newFloorState);
+      state = applyFloorEntry(state, newFloorState);
     }
 
     state = tick(state, action);

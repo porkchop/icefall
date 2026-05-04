@@ -794,6 +794,165 @@ together. The lint rule pin (added in Phase 5.A.2's
 - Accessibility pass (keyboard-only nav, prefers-reduced-motion,
   contrast) is deferred to Phase 9.
 
+### Phase 6 frozen contracts (items + currency + equipment)
+
+These are the contract additions Phase 6 locks in; the canonical
+reference is the Phase 6 callout block in `docs/PHASES.md`. Phase 6
+is **not** a planning-gate phase per the policy at the top of
+`docs/PHASES.md`, so there is no `decision-memo-phase-6.md`; the
+architectural seams are pinned here and refined as 6.A.2's
+implementation lands. Phase 6.A.1 (drift-detection sweep) ships
+this section ahead of 6.A.2's implementation so the action
+vocabulary additions, the inventory data shape, the equipment slot
+enumeration, and the item-effect resolution path are locked before
+code is written. Material design choices that surface during 6.A.1
+that need a strategy-planner pass land back into this section as
+amendments rather than a separate decision memo.
+
+**Inventory data shape — deterministic ordering.** `Player` (Phase
+3 frozen-contract item 5) gains a new readonly field:
+
+```ts
+type Player = {
+  // ...existing readonly fields from Phase 3...
+  readonly inventory: readonly InventoryEntry[];   // sorted by (kind, count)
+  readonly equipment: Equipment;                   // fixed-slot record
+};
+
+type InventoryEntry = {
+  readonly kind: ItemKindId;     // e.g. "item.cred-chip", "item.stim-patch"
+  readonly count: number;        // positive integer; consumables stack
+};
+```
+
+Iteration order is **sorted by `kind` ascending (UTF-16 code-unit
+order on the `ItemKindId` string), tie-break by `count` descending**.
+Same discipline as Phase 3's `monsters` (sorted by `id`) and
+`items` (sorted by `(y, x, kind)`): no iteration over un-ordered
+collections inside `tick()` per the existing `SIM_UNORDERED` lint
+rule. Each `InventoryEntry.count` is a positive integer; an entry
+with `count === 0` is removed (not retained as a zero-count slot).
+Capacity is **unbounded in Phase 6** (the action log enforces
+practical bounds; bounded inventories may land in Phase 9 polish).
+
+**Equipment slot enumeration.** A fixed-slot record of named slots,
+each holding either a single `ItemKindId` or `null`:
+
+```ts
+type Equipment = {
+  readonly weapon: ItemKindId | null;
+  readonly cyberware: ItemKindId | null;
+};
+```
+
+Slot list is **frozen** in Phase 6: bumping is a `rulesetVersion`
+bump and requires architecture-red-team review (Phase 9 polish may
+add `armor`, `accessory`, etc., as additive `rulesetVersion`-bumping
+changes). Each slot accepts only items whose registry entry has the
+matching category — enforced by `tick()` at equip time, with the
+exact rejection error string pinned in 6.A.2.
+
+**Action vocabulary additions (additive Phase 1 frozen contract).**
+Five new `Action.type` strings join Phase 3's `wait | move | attack |
+descend`:
+
+| `type`     | required fields | optional fields | purpose                               |
+|------------|------------------|------------------|---------------------------------------|
+| `pickup`   | (none)           | (none)           | pick up the FloorItem at player pos   |
+| `drop`     | `item`           | (none)           | drop one of the kind-id from inventory|
+| `equip`    | `item`           | (none)           | move kind-id from inventory to slot   |
+| `unequip`  | `item`           | (none)           | move kind-id from slot to inventory   |
+| `use`      | `item`           | (none)           | consume a consumable (heals, etc.)    |
+
+`item` here uses the **existing Phase 1 `TAG_ITEM = 0x20`** wire tag
+(0..255 UTF-8 bytes); no new tag is introduced. This is per the
+Phase 1 frozen "additive vocabulary" rule: new optional fields use
+strictly-greater tags, but reusing an existing tag for a new
+`type` value does NOT bump `ACTION_VERSION`. Adding new types is
+additive; removing or renaming a type is a `rulesetVersion` bump.
+
+**Item-effect resolution path through the per-action roll subhash.**
+Item effects that touch combat outcomes (a stim-patch heal that
+must roll for variance; a weapon's atk-bonus modifier; a trauma-pack
+def-bonus) consume the **same `rollBytes` subhash** the per-action
+combat path uses, with new domain anchors added to the roll-domain
+registry. Phase 6 adds:
+
+| domain                   | purpose                                           |
+|--------------------------|---------------------------------------------------|
+| `item:effect:heal`       | stim-patch / trauma-pack heal-amount roll         |
+| `item:effect:atk-bonus`  | weapon-modifier roll on player attack             |
+| `item:effect:def-bonus`  | cyberware-modifier roll on monster counter-attack |
+
+Domains are 7-bit ASCII, length 1..31 bytes (existing `rollBytes`
+contract). The `index` field for stacked effect rolls increments
+deterministically from 0 within a single action's resolution.
+**No item bypasses the sim stream** — every item-effect computation
+is a `rollU32(stateHashPre, action, domain, index) & mask`
+combination. `Math.random` and floats remain forbidden.
+
+**Equipment-modifier injection at combat time.** Player attack rolls
+already use `combat:atk-bonus` (Phase 3 frozen contract); when a
+weapon is equipped, the bonus from `item:effect:atk-bonus` is
+**added** (integer arithmetic) to the existing combat roll's bonus.
+The combat damage formula `dmg = max(1, atk - def + bonus)` is
+unchanged; the change is in how `bonus` is summed. Same for the
+monster counter-attack path with cyberware.
+
+**Registry append-only invariant for items.** Phase 6 expands
+`src/registries/items.ts` from the Phase 3 baseline of 5 entries
+(`item.cred-chip`, `item.cyberdeck-mod-1`, `item.stim-patch`,
+`item.trauma-pack`, `item.weapon.knife`) to ~20 starter items across
+categories: weapons, cyberware, consumables, currency. The registry
+is **append-only by construction**: entries are listed in
+alphabetical order by `id`, and the long-deferred Phase 2
+decision-memo "registry-immutability enforcement test" (decision 6,
+which Phase 2 deferred to "Phase 6, when a second writer of the
+registry exists") lands in 6.A.2 as the second writer adds the new
+entries — the test asserts the existing 5 ids remain at their
+existing positions and bytes after the expansion. Removing or
+renaming an entry is a `rulesetVersion` bump; reordering is a test
+failure (not a `rulesetVersion` bump because the alphabetical-sort
+contract makes it normalizable, but reordering MUST not change the
+bytes that feed the SIM_DIGEST or the atlas binary).
+
+**Atlas extension — coordinate-stable for Phase 4 sprites.** Phase 6
+adds ~13 new atlas recipes (Phase 4 shipped 7; Phase 6 brings the
+count to ~20 items). Per addendum 3a's coordinate-stability
+invariant, **existing Phase 4 sprite coordinates remain unchanged**;
+new recipes append to the registry-declaration order. Atlas grid is
+still 16 wide × 8 high (128 cells); ~20 sprites + the existing 7 =
+~27 cells used, well under the budget.
+
+**`ATLAS_DIGEST` golden + 4 preset-seed `expectedHash` values bump.**
+The new atlas recipes mean `assets/atlas.png` regenerates with
+different bytes; `ATLAS_DIGEST` and the four
+`ATLAS_PRESET_SEEDS.expectedHash` values are bumped during 6.A.2
+on the sandbox host (ubuntu-equivalent) and pasted literally per
+the Phase 4 addendum N12 pattern. The Phase 4.B
+`cross-os-atlas-equality` matrix re-asserts pairwise byte-equality
+against the new binary in 6.B.
+
+**Inventory-from-log reconstruction invariant.** SPEC.md principle
+2 says "action log is the save." Phase 6 makes this load-bearing
+for inventory: a new test asserts that `replay(actions)` produces
+a `RunState` whose inventory + equipment are byte-identical to the
+state captured at the end of the same action sequence. No inventory
+state is persisted separately from the action log. Phase 8 will
+exercise this further when fingerprint-based replay lands.
+
+**Deferred Phase 6 contracts.**
+- Inventory capacity bound (currently unbounded; Phase 9 may add a
+  bound for UI screen ergonomics, with a cap that's a
+  `rulesetVersion` bump because it changes drop-on-overfull
+  behavior).
+- Stack/unstack action types for splitting consumable stacks (Phase
+  9 polish if needed).
+- Item rarity / tier modifiers as multi-roll combinations (Phase 7+
+  if NPC shops stock by rarity).
+- Item descriptions / flavor text in a `theme` registry (Phase 9
+  polish).
+
 ### Build-time constants
 
 `commitHash` and `rulesetVersion` are injected via Vite `define`. They

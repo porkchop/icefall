@@ -5,6 +5,8 @@
  * `rulesetVersion` bump.
  */
 
+import { utf8 } from "../core/hash";
+
 /** Maximum BFS step count at which a monster transitions to chasing. */
 export const MAX_LOS_RADIUS = 8;
 
@@ -15,6 +17,27 @@ export const MAX_LOS_RADIUS = 8;
  * impossible to confuse with any future action-encoder tag extension.
  */
 export const ROLL_DOMAIN_ANCHOR_TEXT = "icefall:roll:v1:" as const;
+
+/**
+ * `Uint8Array` form of `ROLL_DOMAIN_ANCHOR_TEXT`. Single source-of-truth
+ * for the encoded anchor — `rollBytes` imports this constant rather
+ * than re-encoding via `utf8(...)`. Phase 3.A.2 code-review
+ * carry-forward, finally landed in Phase 6.A.1's drift sweep ahead of
+ * Phase 6.A.2's roll-domain-registry extensions for item effects.
+ *
+ * The byte-explicit pre-image test in `tests/sim/combat.test.ts`
+ * deliberately re-encodes via `utf8(ROLL_DOMAIN_ANCHOR_TEXT)` to prove
+ * byte-exact contract conformance from scratch; this is intentional
+ * (the audit-hostile-reader principle from the original carry-forward).
+ *
+ * Not `Object.freeze`-ed because `Object.freeze` rejects
+ * array-buffer views with elements; consumers MUST treat the bytes as
+ * read-only by convention (no `bytes[i] = ...` writes; same discipline
+ * as `ATLAS_SEED_DOMAIN_BYTES` in `src/atlas/seed.ts`).
+ */
+export const ROLL_DOMAIN_ANCHOR_BYTES: Uint8Array = utf8(
+  ROLL_DOMAIN_ANCHOR_TEXT,
+);
 
 /** Phase 3 frozen action vocabulary (decision 3). */
 export const ACTION_TYPE_WAIT = "wait" as const;
