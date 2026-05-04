@@ -283,6 +283,38 @@ For each phase the doc lists: **Goal**, **Lead agent**, **Reviewers**, **Deliver
 
 ## Phase 5 — Renderer + Input
 
+> **Phase 5 split.** Per `artifacts/phase-update-phase-5.json` (the
+> phase-update artifact recording the split decision after Phase 4.B's
+> cross-OS matrix verified Phase 4 end-to-end), Phase 5 is split into
+> **Phase 5.A.1** (drift-detection sweep — Phase 3.A.2 cosmetic
+> carry-forwards now load-bearing because Phase 5 will exercise sim
+> code; Phase 4.A.2 carry-forwards N4–N7 from
+> `artifacts/code-review-phase-4-A-2.md`; ARCHITECTURE.md updated to
+> reference Phase 5 frozen contracts including the renderer/input/ui
+> layer-table entries; and the existing `src/atlas/loader.ts` API
+> reviewed for renderer-side suitability and reused in place — the
+> Phase 4.A.2 review noted that loader is naturally atlas-pipeline-internal
+> and `docs/PHASES.md`'s reference to `src/render/atlas-loader.ts` was
+> a doc artifact; the renderer imports `loadAtlas()` from
+> `src/atlas/loader.ts` rather than relocating it), **Phase 5.A.2**
+> (sandbox-verifiable implementation: `src/render/canvas.ts` tile
+> renderer + frame loop, `src/input/keyboard.ts` keypress→action
+> descriptor, `src/ui/hud.ts` HP/eddies/floor/fingerprint widget,
+> sim→render→input integration in `src/main.ts` replacing the
+> diagnostic page with the playable game while preserving the
+> diagnostic self-test surface for cross-runtime determinism, and
+> the Phase 5 layer-import lint rules), and **Phase 5.B** (live
+> GitHub Pages verification — cross-runtime Playwright on
+> chromium/firefox/webkit asserting that five movement keys advance
+> sim state and the HUD reflects it; the cross-OS matrix from Phase
+> 4.B continues to assert atlas determinism). Phase 6 cannot begin
+> until all three are approved. Phase 5 is **not** a planning-gate
+> phase per the policy at the top of this document, so no
+> `decision-memo-phase-5.md` is required; the X.A.1/X.A.2/X.B
+> decomposition is the established pattern from Phases 3 and 4 and
+> is recorded in the phase-update artifact rather than a planning
+> memo.
+
 **Goal.** Make the simulation visible and playable using the generated atlas. Canvas-based tile renderer, keyboard input, simple HUD.
 
 **Lead agent.** `frontend-builder`
@@ -290,20 +322,33 @@ For each phase the doc lists: **Goal**, **Lead agent**, **Reviewers**, **Deliver
 
 **Deliverables.**
 - `src/render/canvas.ts` — tile renderer reading `assets/atlas.png` + `assets/atlas.json`
-- `src/render/atlas-loader.ts` — loads the atlas at startup, validates against the in-build atlas hash
+- Atlas-loader integration — the renderer's `init()` calls `loadAtlas()` from `src/atlas/loader.ts` (Phase 4.A.2's existing loader; the Phase 4.A.2 code review approved this naming over the original `src/render/atlas-loader.ts` reference because the loader is atlas-pipeline-internal — same module, just imported by the renderer at startup)
 - `src/input/keyboard.ts` — keypress → action descriptor
 - `src/ui/hud.ts` — HP, eddies, floor indicator, fingerprint widget
-- The deployed page transitions from "diagnostic" to "playable game" — the live URL is now a real (sparse) game
+- The deployed page transitions from "diagnostic" to "playable game" — the live URL is now a real (sparse) game; the diagnostic self-test banner + the cross-runtime determinism digests + the floor-preview + scripted-playthrough + atlas-preview sections continue to ship as a collapsible "diagnostics" section so cross-runtime CI assertions remain green
 
-**Acceptance criteria.**
+**Acceptance criteria — Phase 5.A.1 (drift-detection sweep).**
+- Phase 3.A.2 cosmetic carry-forwards from `artifacts/code-review-phase-3-A-2.md` (applyFloorEntry redundant param, dirOrdinalForStep export-only-by-tests comment, ROLL_DOMAIN_ANCHOR_BYTES shared constant, tick unknown-action defensive type-check, e2e SIM_DIGEST duplication note) addressed where they touch files Phase 5.A.2 will modify; the rest carried forward to a future phase boundary.
+- Phase 4.A.2 cosmetic carry-forwards from `artifacts/code-review-phase-4-A-2.md` (N4 loader JSON.parse cast→eslint-disable comment; N5 EMPTY_SHA256/PLACEHOLDER_RULESET_VERSION dual-source byte-equality assertion test; N6 RecipeContext type colocated in floor.ts→relocate to a shared types module; N7 fflate version explicit assertion in atlas-encoder-cross-runtime self-test) addressed.
+- `docs/ARCHITECTURE.md` updated with Phase 5 frozen contracts (the new `src/render/`, `src/input/`, `src/ui/` layer-table entries with their import-allowed and import-forbidden lists; the renderer's read-only contract on sim state; the input descriptor's relationship to the Phase 1 `Action` schema; the HUD's read-only contract on RunState; the atlas-loader call site at run start; the lint rule inventory additions for the new layers).
+- `npm ci && npm run lint && npm run test && npm run build` all green inside the sandbox, with no net-new `src/render/**`, `src/input/**`, or `src/ui/**` code.
+
+**Acceptance criteria — Phase 5.A.2 (sandbox-verifiable implementation).**
 - A human can play a real run end-to-end on the deployed URL (it'll be punishing without polish, but the loop closes).
-- Renderer reads from sim state and never writes to it; sim is unaware the renderer exists (architectural test: `render/` cannot import from `sim/` write paths).
-- Renderer module disallowed from importing `core/streams` or `sim/combat` (lint rule).
-- Atlas hash mismatch (loaded atlas does not match build-time hash) produces a clear error and aborts the run.
-- Playwright smoke test against the deployed URL: load the page, press five movement keys, assert the HUD updates accordingly.
+- Renderer reads from sim state and never writes to it; sim is unaware the renderer exists (architectural test: `src/render/**` cannot import from `src/sim/**` write paths).
+- Renderer module disallowed from importing `src/core/streams.ts` or `src/sim/combat.ts` (lint rule additions in `eslint.config.js`).
+- Atlas hash mismatch (loaded atlas does not match build-time hash) produces a clear error and aborts the run — already implemented in `src/atlas/loader.ts` per Phase 4.A.2 addendum N7; Phase 5.A.2 wires the loader into `src/main.ts`'s startup path.
+- The diagnostic page's existing sections (self-test, build-info, floor-preview, scripted-playthrough, atlas-preview) continue to render so the cross-runtime Playwright suite from Phases 1.B/2.B/3.B/4.B keeps passing alongside the new playable-game UI.
+- `npm ci && npm run lint && npm run test && npm run build && npm run test:e2e` all green inside the sandbox.
+
+**Acceptance criteria — Phase 5.B (live-deploy + cross-runtime verification).**
+- The live GitHub Pages URL serves the playable-game UI alongside the diagnostic sections.
+- Cross-runtime Playwright on chromium/firefox/webkit: load the page, press five movement keys, assert the HUD updates (HP / floor indicator advance per the scripted action sequence on a fixed seed).
+- The Phase 4.B `cross-os-atlas-equality` matrix continues to pass — the renderer changes are JS-only and do not regenerate the atlas, so the ATLAS_DIGEST golden + the four preset-seed expectedHash goldens remain unchanged. Drift is a regression and a Phase 5.B blocker.
 
 **Risks.**
 - Renderer accidentally introducing nondeterminism — caught by the import boundary lint rule.
+- Adding the playable game without preserving the diagnostic surface would break the cross-runtime determinism assertions established in Phases 1.B/2.B/3.B/4.B; mitigated by the Phase 5.A.2 acceptance criterion above.
 
 ---
 
