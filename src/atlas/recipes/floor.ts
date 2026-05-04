@@ -8,12 +8,9 @@ import type { PRNG } from "../../core/prng";
 import type { Palette } from "../palette";
 import { paletteIndex, valueNoise2D } from "../primitives";
 import { TILE_SIZE } from "../params";
+import type { RecipeContext } from "./types";
 
-export type RecipeContext = {
-  readonly tileSize: 16;
-  readonly slotName: string;
-  readonly atlasSeed: string;
-};
+export type { RecipeContext };
 
 export function recipeFloor(
   prng: PRNG,

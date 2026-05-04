@@ -28,7 +28,7 @@ import {
   ATLAS_RECIPES,
   type AtlasSlotId,
 } from "../registries/atlas-recipes";
-import type { RecipeContext } from "./recipes/floor";
+import type { RecipeContext } from "./recipes/types";
 
 export type AtlasManifest = {
   readonly atlasBinaryHash: string;

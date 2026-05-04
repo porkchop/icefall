@@ -9,7 +9,7 @@ import { CYBERPUNK_NEON_V1 } from "../../src/atlas/palette";
 import { TILE_SIZE, ATLAS_SEED_DEFAULT } from "../../src/atlas/params";
 import { atlasSeedToBytes } from "../../src/atlas/seed";
 import { streamsForRun } from "../../src/core/streams";
-import type { RecipeContext } from "../../src/atlas/recipes/floor";
+import type { RecipeContext } from "../../src/atlas/recipes/types";
 
 /**
  * Phase 4 frozen-contract item 3 — recipe registry shape tests (memo

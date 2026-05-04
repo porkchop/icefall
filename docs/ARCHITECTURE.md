@@ -691,6 +691,109 @@ mod's local module.` (addendum N10).
   *new* `assets/atlas.png` with a *new* `atlasBinaryHash` folded into
   a *new* `rulesetVersion` (addendum N13).
 
+### Phase 5 frozen contracts (renderer + input + ui)
+
+These are the contract additions Phase 5 locks in; the canonical
+reference is the Phase 5 callout block in `docs/PHASES.md`. Phase 5
+is **not** a planning-gate phase per the policy at the top of
+`docs/PHASES.md`, so there is no `decision-memo-phase-5.md`; the
+architectural seams are pinned here and refined as 5.A.2's
+implementation lands. Phase 5.A.1 (drift-detection sweep) ships
+this section ahead of 5.A.2's implementation so the lint scopes,
+the read-only contracts, and the layer-import boundaries are
+locked before code is written.
+
+**Renderer is a read-only sink on sim state.** `src/render/canvas.ts`
+takes a `RunState` (Phase 3 frozen contract) and produces canvas
+draw calls; it MUST NOT mutate the state, MUST NOT advance the
+state-hash chain, MUST NOT consume any `RunStreams` cursor, MUST
+NOT call `tick()` or any `src/sim/**` write path. The only legal
+imports from `src/sim/**` are read-only **type** imports
+(`import type { RunState, ... } from "../sim/types"`) and the
+read-only **values** that were exported as `Readonly<...>` in
+Phase 3 (none currently exist as values; types only). A runtime
+architectural test in `tests/render/render-readonly.test.ts` calls
+the renderer with a deeply-frozen `RunState` and confirms no
+mutation throws.
+
+**Renderer cannot import `src/core/streams.ts` or `src/sim/combat.ts`.**
+Pinned by `eslint.config.js` `no-restricted-imports` patterns (added
+in Phase 5.A.2). `src/core/streams.ts` is the PRNG-cursor surface;
+allowing the renderer to import it would let a render-time bug
+silently advance a stream. `src/sim/combat.ts` is the
+roll-derivation surface; render code has no business consuming
+roll bytes.
+
+**Atlas loader is called once at run start.** `src/main.ts`'s
+startup path calls `await loadAtlas()` (from `src/atlas/loader.ts`
+— defined in Phase 4.A.2, exported but uncalled until Phase 5.A.2)
+before any sim tick is exercised. Failure paths: the
+`PLACEHOLDER_RULESET_VERSION` refusal (pinned message per addendum
+N7), the `__ATLAS_MISSING__` refusal (pinned message), the
+`atlas.png` SHA-256 mismatch refusal. The loader's `JSON.parse`
+call is the data-ingestion boundary and is annotated with an
+`eslint-disable-next-line determinism/no-float-arithmetic` comment;
+the deterministic interior receives the parsed object as `unknown`
+and validates structurally via `parseAtlasJson`.
+
+**Input descriptor maps to Phase 1 `Action` schema.**
+`src/input/keyboard.ts` produces `Action` descriptors per
+`docs/ARCHITECTURE.md` "Action descriptor encoding". Keypress →
+`Action` is a pure mapping; no Phase 1 `ACTION_VERSION` bump is
+required. Phase 5's keybindings (arrow keys / WASD → `move dir`,
+space → `wait`, single key → `attack dir`, `>` → `descend`) are
+*configuration* rather than schema additions; rebinding is allowed
+without a `rulesetVersion` bump because the produced `Action`
+bytes are unchanged.
+
+**HUD is a read-only sink on `RunState`.** `src/ui/hud.ts`
+displays `state.player.hp`, `state.player.hpMax`, `state.floorN`,
+`state.outcome`, and the `fingerprint(state.fingerprintInputs)`
+short string. Same read-only discipline as the renderer: no
+mutation, no PRNG consumption, no `tick()` calls. The fingerprint
+widget is recomputed on each frame from the deterministic inputs;
+it does not cache.
+
+**Diagnostic surface preserved.** Phase 5 does not remove the
+existing diagnostic page sections (self-test banner, build-info,
+floor-preview, scripted-playthrough, atlas-preview). The
+playable-game UI is added as a peer; the diagnostic sections may
+be moved into a collapsible `<details>` element but their DOM ids
+and `window.__*__` flags are preserved so the cross-runtime
+Playwright assertions established in Phases 1.B / 2.B / 3.B / 4.B
+keep passing alongside the new keypress / HUD assertions.
+
+**`src/render/**`, `src/input/**`, `src/ui/**` layer-table entries.**
+New peers of `src/sim/`, `src/mapgen/`, and `src/atlas/` (no float,
+no time except for input-event timestamps which are untrusted by
+the sim, no async except for the atlas-loader's startup `await`).
+Layer constraints:
+
+| Layer | Imports allowed | Imports forbidden |
+|---|---|---|
+| `src/render/` | `src/core/` (read-only types), `src/sim/types`, `src/atlas/loader.ts`, `src/atlas/manifest` (types), `assets/atlas.{png,json}` (via fetch) | `src/core/streams.ts`, `src/core/state-chain.ts` write paths, `src/sim/combat.ts`, `src/sim/turn.ts`, `src/sim/run.ts` write paths, `src/mapgen/generate.ts` write paths, `src/input/`, `src/main.ts`; mutation of any imported state |
+| `src/input/` | `src/core/` (read-only types), `src/sim/types` | `src/core/streams.ts`, `src/sim/combat.ts`, `src/sim/turn.ts`, `src/sim/run.ts` write paths, `src/render/`, `src/mapgen/`, `src/main.ts`; mutation of any state |
+| `src/ui/` | `src/core/` (read-only types + `fingerprint`), `src/sim/types`, `src/build-info.ts` (commitHash, rulesetVersion read-only) | `src/core/streams.ts`, `src/sim/` write paths, `src/render/`, `src/input/`, `src/mapgen/`, `src/main.ts`; mutation of any state |
+
+`src/main.ts` is the **single** orchestrator: it reads input via
+`src/input/`, drives the sim via `src/sim/harness` or its Phase 5+
+input-driven equivalent, passes the `RunState` to `src/render/`
+and `src/ui/`, and is the only module allowed to wire the four
+together. The lint rule pin (added in Phase 5.A.2's
+`eslint.config.js` extension) enforces this.
+
+**Deferred Phase 5 contracts.**
+- The harness's single sim→mapgen import edge (Phase 3.A.2
+  `src/sim/harness.ts` exception) is expected to migrate to a
+  dedicated `src/run/` orchestration layer in Phase 5.A.2 alongside
+  the input-driven loop, removing the eslint single-file exception.
+- Per-frame timing budgets (target 60 FPS at the diagnostic page's
+  rendering rate) are deferred to Phase 9 polish; Phase 5 ships
+  whatever frame rate the canvas tile-blit pipeline produces with
+  no animation system.
+- Accessibility pass (keyboard-only nav, prefers-reduced-motion,
+  contrast) is deferred to Phase 9.
+
 ### Build-time constants
 
 `commitHash` and `rulesetVersion` are injected via Vite `define`. They
@@ -718,6 +821,8 @@ unit tests).
 | no `Buffer`, `node:buffer`, `crypto`, `node:crypto`, `crypto.subtle` | `src/atlas/**` | `no-restricted-imports` paths + `no-restricted-globals` + `no-restricted-syntax` member-access selector — Phase 4 addendum B4; encoder uses `Uint8Array` and `@noble/hashes/sha256` only |
 | no bare `fs`/`path`/`url` (must use `node:` prefix) | `tools/**` | `no-restricted-imports` paths — Phase 4 addendum N10; bare form resolves through Vite's resolver and can collide with a mod's local module |
 | `tools/**` boundary | `tools/**` | `no-restricted-imports` forbids `**/render/**`, `**/input/**`, `**/main` — Node-only build-time code |
+| no import of `core/streams.ts` or `sim/combat.ts` | `src/render/**` | Phase 5.A.2 `no-restricted-imports` — render is a read-only sink on sim state; PRNG consumption and roll-derivation are sim-internal concerns. Pinned in the Phase 5 frozen contracts above; rule body lands with the first `src/render/**` file in 5.A.2 |
+| no import of sim write paths | `src/render/**`, `src/input/**`, `src/ui/**` | Phase 5.A.2 `no-restricted-imports` — only `src/main.ts` orchestrates writes to `RunState`; render/input/ui are read-only consumers. Rule body lands in 5.A.2 |
 | import boundaries | per layer table above | `no-restricted-imports` patterns scoped via `overrides` |
 
 ## Runtime dependencies

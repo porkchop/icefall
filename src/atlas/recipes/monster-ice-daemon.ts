@@ -8,7 +8,7 @@ import type { PRNG } from "../../core/prng";
 import type { Palette } from "../palette";
 import { circleMask, paletteIndex, valueNoise2D } from "../primitives";
 import { TILE_SIZE } from "../params";
-import type { RecipeContext } from "./floor";
+import type { RecipeContext } from "./types";
 
 export function recipeMonsterIceDaemon(
   prng: PRNG,

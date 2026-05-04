@@ -115,12 +115,12 @@ export async function loadAtlas(
   ]);
   const pngBytes = new Uint8Array(await pngResp.arrayBuffer());
   const manifestText = await jsonResp.text();
-  // JSON.parse at the data-ingestion boundary; loadAtlasFromBytes
-  // accepts the resulting `unknown` and validates structurally. The
-  // `(JSON as unknown as ...).parse` shape sidesteps the
-  // `determinism/no-float-arithmetic` `JSON.parse` ban (intended for
-  // sim/mapgen *interior* code; the loader is a boundary).
-  const jsonParse = (JSON as unknown as { parse(s: string): unknown }).parse;
-  const parsed: unknown = jsonParse(manifestText);
+  // JSON.parse at the data-ingestion boundary. `determinism/no-float-arithmetic`
+  // bans JSON.parse inside sim/mapgen/atlas *interior* code (data should
+  // be ingested at module boundaries and validated structurally before
+  // reaching deterministic code paths). The loader IS that boundary;
+  // `loadAtlasFromBytes` validates the parsed object via `parseAtlasJson`.
+  // eslint-disable-next-line determinism/no-float-arithmetic
+  const parsed: unknown = JSON.parse(manifestText);
   return loadAtlasFromBytes(pngBytes, parsed, env);
 }

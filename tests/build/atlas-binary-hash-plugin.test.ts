@@ -11,7 +11,11 @@ import {
   computeDefinePayload,
 } from "../../scripts/vite-plugin-atlas-binary-hash.mjs";
 import { sha256Hex } from "../../src/core/hash";
-import { RULES_FILES } from "../../src/build-info";
+import {
+  RULES_FILES,
+  EMPTY_SHA256 as BUILD_INFO_EMPTY_SHA256,
+  PLACEHOLDER_RULESET_VERSION as BUILD_INFO_PLACEHOLDER_RULESET_VERSION,
+} from "../../src/build-info";
 
 /**
  * Phase 4.A.1 unit tests for the atlas-binary-hash Vite plugin
@@ -39,6 +43,26 @@ function freshRoot(): string {
 describe("EMPTY_SHA256", () => {
   it("equals SHA-256 of the empty byte string (addendum B5 pinned constant)", () => {
     expect(EMPTY_SHA256).toBe(sha256Hex(new Uint8Array(0)));
+  });
+});
+
+/**
+ * Phase 5.A.1 drift-sweep dual-source equality (Phase 4.A.2 code-review
+ * nit N5). `EMPTY_SHA256` and `PLACEHOLDER_RULESET_VERSION` are
+ * duplicated between the .mjs Vite plugin (loaded at config-load time;
+ * cannot transit `@noble/hashes` through the TypeScript pipeline) and
+ * `src/build-info.ts` (the runtime export). The duplication is forced
+ * by the build pipeline; this test asserts byte-equality so silent
+ * drift between the two sources fails loudly.
+ */
+describe("dual-source constant equality (build-info ↔ vite plugin)", () => {
+  it("EMPTY_SHA256 matches between scripts/vite-plugin-atlas-binary-hash.mjs and src/build-info.ts", () => {
+    expect(EMPTY_SHA256).toBe(BUILD_INFO_EMPTY_SHA256);
+  });
+  it("PLACEHOLDER_RULESET_VERSION matches between scripts/vite-plugin-atlas-binary-hash.mjs and src/build-info.ts", () => {
+    expect(PLACEHOLDER_RULESET_VERSION).toBe(
+      BUILD_INFO_PLACEHOLDER_RULESET_VERSION,
+    );
   });
 });
 
