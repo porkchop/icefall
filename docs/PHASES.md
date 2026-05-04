@@ -354,6 +354,57 @@ For each phase the doc lists: **Goal**, **Lead agent**, **Reviewers**, **Deliver
 
 ## Phase 6 — Items, Currency, Equipment
 
+> **Phase 6 split.** Per `artifacts/phase-update.json` (the
+> phase-update artifact recording the split decision after Phase 5.B's
+> live deploy verified Phase 5 end-to-end), Phase 6 is split into
+> **Phase 6.A.1** (drift-detection sweep — Phase 5.A.2 cosmetic
+> carry-forwards from `artifacts/code-review-phase-5-A-2.md` (canvas
+> `fillStyle = "#000"` hidden constant; `tests/ui/fake-dom.ts`
+> happy-dom evaluation; `Direction` cast helper); Phase 3.A.2 cosmetic
+> carry-forwards now load-bearing because Phase 6 modifies sim files
+> (turn.ts will gain pickup/drop/equip/unequip/use action handling;
+> run.ts gains inventory state initialization; combat.ts may gain
+> equipment-modifier injection — the applyFloorEntry redundant param
+> and tick unknown-action defensive type-check carry-forwards now
+> apply); ARCHITECTURE.md updated with Phase 6 frozen contracts
+> (inventory data shape, equipment slot enumeration, action
+> vocabulary additions and their wire-format byte layouts, item-effect
+> resolution path through the per-action roll subhash, registry
+> append-only invariant for items)), **Phase 6.A.2**
+> (sandbox-verifiable implementation: inventory + equipment types in
+> `src/sim/types.ts`; pickup/drop/equip/unequip/use Action descriptors
+> additive to the Phase 1 schema (new `type` strings; new optional
+> fields with strictly-greater tags); `tick()` extended to handle the
+> new actions with deterministic effect resolution; item registry
+> expanded to ~20 starter items across weapons / cyberware /
+> consumables / currency categories; ~20 atlas recipes added (registry
+> append-only; coordinate-stable for Phase 4 sprites per addendum 3a);
+> `assets/atlas.png` regenerated and `ATLAS_DIGEST` golden bumped;
+> four preset-seed `expectedHash` values bumped; new `INVENTORY_DIGEST`
+> cross-runtime self-test (or extension to `SIM_DIGEST` via a new
+> scripted log exercising the inventory loop); inventory + equipment
+> UI screens in `src/ui/` (read-only on RunState per Phase 5
+> contract); inventory-from-log reconstruction test asserting
+> `replay(actions) === RunState` byte-equality), and **Phase 6.B**
+> (live GitHub Pages verification — cross-runtime Playwright on
+> chromium/firefox/webkit asserting the pickup → equip → kill scripted
+> sequence on a fixed seed produces a pinned final state hash; the
+> Phase 4.B `cross-os-atlas-equality` matrix re-runs against the new
+> atlas binary and asserts pairwise SHA-256 equality on all three
+> OSes; CI fails if the checked-in atlas is stale per the existing
+> `git diff --exit-code -- assets/` gate). Phase 7 cannot begin until
+> all three are approved. Phase 6 is **not** a planning-gate phase
+> per the policy at the top of this document, so no
+> `decision-memo-phase-6.md` is required; the X.A.1/X.A.2/X.B
+> decomposition is the established pattern from Phases 3 / 4 / 5
+> and is recorded in the phase-update artifact rather than a planning
+> memo. Material design choices (inventory shape, equipment slot
+> enumeration, action vocabulary schema) are resolved during
+> Phase 6.A.1's drift sweep via a brief strategy-planner pass if
+> the implementation surfaces multiple plausible options; the
+> output (if any) lives in the ARCHITECTURE.md Phase 6 section
+> rather than a separate decision memo.
+
 **Goal.** Treasures, eddies, consumables (stim patches, trauma packs), and equippable cyberware/weapons that modify combat outcomes. Atlas recipes are extended to cover the full item set.
 
 **Lead agent.** `engine-builder` (rules), `frontend-builder` (UI)
@@ -366,11 +417,23 @@ For each phase the doc lists: **Goal**, **Lead agent**, **Reviewers**, **Deliver
 - Item registry populated with ~20 starter items across the relevant categories
 - Atlas recipes for all ~20 items; atlas regenerates with new sprites
 
-**Acceptance criteria.**
+**Acceptance criteria — Phase 6.A.1 (drift-detection sweep).**
+- Phase 5.A.2 cosmetic carry-forwards from `artifacts/code-review-phase-5-A-2.md` addressed where they touch files Phase 6.A.2 will modify (specifically the `Direction` cast helper if Phase 6.A.2 extends `DEFAULT_KEY_BINDINGS` with inventory keys; the `fillStyle = "#000"` hidden constant if Phase 6.A.2 extends the renderer with inventory tile drawing).
+- Phase 3.A.2 cosmetic carry-forwards from `artifacts/code-review-phase-3-A-2.md` addressed where they apply: applyFloorEntry redundant param at run.ts (Phase 6.A.2 modifies run.ts to initialize inventory); tick unknown-action defensive type-check at turn.ts (Phase 6.A.2 extends the action vocabulary; the defensive check would catch typo bugs in the new pickup/drop/equip handlers); ROLL_DOMAIN_ANCHOR_BYTES shared constant at combat.ts (Phase 6.A.2 may extend the roll-domain registry for item-effect rolls).
+- `docs/ARCHITECTURE.md` updated with Phase 6 frozen contracts (inventory data shape with deterministic ordering, equipment slot enumeration, the additive action vocabulary additions with byte-explicit wire format per the Phase 1 frozen contract, item-effect resolution path through the existing per-action roll subhash, registry append-only invariant for items).
+- `npm ci && npm run lint && npm run test && npm run build` all green inside the sandbox, with no net-new inventory / equipment / item-recipe code.
+
+**Acceptance criteria — Phase 6.A.2 (sandbox-verifiable implementation).**
 - Item effects are deterministic and resolved through the same hash-driven combat path; no item bypasses the sim stream.
-- Inventory state is fully reconstructible from the action log alone — no inventory state is persisted separately.
-- Adding new items to the registry triggers atlas regeneration; CI fails if the checked-in atlas is stale.
-- Playwright test on the live URL: pick up an item → equip it → kill a scripted monster on a fixed seed → assert state hash matches a golden value.
+- Inventory state is fully reconstructible from the action log alone — no inventory state is persisted separately. Asserted by a new test that runs a scripted action log, captures the final inventory, replays the same log from genesis, and asserts byte-identical inventory.
+- Adding new items to the registry triggers atlas regeneration; CI fails if the checked-in atlas is stale (existing `git diff --exit-code -- assets/` gate per Phase 4.A.2 decision 10).
+- The deployed page's existing diagnostic + playable surfaces continue to render so the cross-runtime Playwright suite from Phases 1.B/2.B/3.B/4.B/5.B keeps passing alongside the new inventory UI and the bumped `ATLAS_DIGEST` + preset-seed `expectedHash` values.
+- `npm ci && npm run lint && npm run test && npm run build && npm run test:e2e` all green inside the sandbox.
+
+**Acceptance criteria — Phase 6.B (live-deploy + cross-runtime verification).**
+- The live GitHub Pages URL serves the updated playable game with the inventory UI working.
+- The Phase 6.B Playwright job exercises the pickup → equip → kill scripted sequence on chromium/firefox/webkit on a fixed seed and asserts the final state hash matches a pinned golden hex value.
+- The Phase 4.B `cross-os-atlas-equality` matrix re-runs against the new atlas binary and reports green on all three OSes (the new atlas is larger by ~13 sprites' worth of pixels but the deterministic-encoder discipline should hold; drift on macOS or Windows is a Phase 6.B blocker requiring a phase-update).
 
 ---
 
