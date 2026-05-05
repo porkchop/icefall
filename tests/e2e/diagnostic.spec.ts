@@ -6,6 +6,23 @@ const RANDOM_WALK_DIGEST =
 const SIM_DIGEST =
   "321c09e5f87e879aebdf58ccaaada5e85f8a114bf01f4e012039eced5dba079e";
 
+// Phase 7.A.2b — final state hash after running the synthesized
+// winning action log against `SELF_TEST_WIN_INPUTS`. Pinned in
+// `src/core/self-test.ts:WIN_DIGEST` and mirrored here per the Phase
+// 4 addendum N12 mirror invariant. The Phase 7.B cross-runtime
+// Playwright job will assert this digest end-to-end via the browser
+// self-test `win-cross-runtime-digest` entry which runs the same log
+// inside chromium / firefox / webkit and reports green via the
+// existing `__SELF_TEST_DETAILS__` surface.
+const WIN_DIGEST =
+  "fb36a2fe54e3581a6105ed0ef80afcf8269fc5f97ba633612028c54039828447";
+// Reference WIN_DIGEST so the constant participates in the linted
+// mirror invariant; the assertion lives inside the browser self-test
+// (the diagnostic page surfaces all self-test failures via
+// `__SELF_TEST_DETAILS__`). Phase 7.B will land an explicit
+// `__SIM_WIN_FINAL_STATE_HASH__` window flag and a dedicated test.
+void WIN_DIGEST;
+
 // Phase 7.A.1 — atlas regenerated to add the 3 missing Phase 3 item
 // recipes (item.stim-patch, item.trauma-pack, item.cyberdeck-mod-1)
 // per Phase 6.A.2 code-review nit N4. Existing 23 sprite coordinates

@@ -48,7 +48,10 @@ function stubManifest(): AtlasManifest {
     "tile.wall.cyberfloor_01",
     "tile.door.cyberdoor",
     "monster.ice.daemon",
+    "monster.boss.black-ice-v0",
     "item.cred-chip",
+    "npc.fixer",
+    "npc.info-broker",
     "npc.ripperdoc",
     "player",
   ] as const) {

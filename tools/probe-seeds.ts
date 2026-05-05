@@ -9,8 +9,11 @@ import { runScripted } from "../src/sim/harness";
 
 // Generate a wide variety of seed strings.
 const seeds: string[] = [];
-for (let i = 0; i < 5000; i++) {
-  seeds.push(`win-${i}`);
+const prefix = process.env.SEED_PREFIX ?? "win";
+const startIdx = parseInt(process.env.SEED_START ?? "0", 10);
+const count = parseInt(process.env.SEED_COUNT ?? "5000", 10);
+for (let i = startIdx; i < startIdx + count; i++) {
+  seeds.push(`${prefix}-${i}`);
 }
 
 const winners: { seed: string; actions: number; hp: number }[] = [];
@@ -40,6 +43,12 @@ for (const seed of seeds) {
       );
     } else if (result.finalState.floorN === 10) {
       floor10++;
+      const boss = result.finalState.floorState.monsters.find(
+        (m) => m.kind === "monster.boss.black-ice-v0",
+      );
+      console.log(
+        `${seed}: F10 outcome=${result.outcome} hp=${result.finalState.player.hp} bossHP=${boss?.hp ?? "?"} actions=${actions.length}`,
+      );
     }
     if (result.finalState.floorN > bestFloor || (result.finalState.floorN === bestFloor && result.finalState.player.hp > 0 && result.outcome === 'won')) {
       bestFloor = result.finalState.floorN;

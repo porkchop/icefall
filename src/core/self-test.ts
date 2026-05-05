@@ -21,6 +21,10 @@ import {
   SELF_TEST_INVENTORY_INPUTS,
   SELF_TEST_INVENTORY_LOG,
 } from "../sim/self-test-inventory-log";
+import {
+  SELF_TEST_WIN_INPUTS,
+  SELF_TEST_WIN_LOG,
+} from "../sim/self-test-win-log";
 import { ACTION_TYPE_WAIT } from "../sim/params";
 import { seedToBytes } from "./seed";
 import { generateAtlas } from "../atlas/generate";
@@ -115,6 +119,24 @@ export const ATLAS_ENCODER_SINGLE_COLOR_TILE_HASH =
  */
 export const INVENTORY_DIGEST =
   "9126830de1ee283b2a0823d57aea4025c2dd1231cd0548c30ed3573481bc46c8";
+
+/**
+ * Hardcoded golden digest of the final state hash after running
+ * `SELF_TEST_WIN_LOG` (a synthesized winning action sequence) against
+ * `SELF_TEST_WIN_INPUTS`. Pinning point for cross-runtime sim
+ * determinism on the Phase 7.A.2 NPC + shop + boss-FSM additions: the
+ * scripted run buys an upgrade from an NPC, descends through floors
+ * 1..9, defeats the floor-10 boss, and reaches `outcome === "won"`.
+ * Any silent drift in the talk/buy/sell handlers, the boss FSM phase
+ * transitions, the boss-room spawn override, the shop-stock /
+ * shop-price roll domains, or the win-state transition surfaces here
+ * in any runtime (Node, Chromium, Firefox, WebKit).
+ *
+ * Phase 7 frozen contract item: changing this constant is a
+ * `rulesetVersion` bump and requires `architecture-red-team` review.
+ */
+export const WIN_DIGEST =
+  "fb36a2fe54e3581a6105ed0ef80afcf8269fc5f97ba633612028c54039828447";
 
 const DIRECTIONS = ["wait", "move", "use", "attack"] as const;
 
@@ -365,6 +387,31 @@ const checks: Check[] = [
       assert(
         got === INVENTORY_DIGEST,
         `inventory-cross-runtime-digest mismatch: actual=${got}`,
+      );
+    },
+  },
+  {
+    name: "win-cross-runtime-digest",
+    run() {
+      // Phase 7.A.2b — re-run the synthesized winning action log and
+      // assert (a) `outcome === "won"` and (b) the pinned
+      // `WIN_DIGEST`. Cross-runtime: any drift in the Phase 7 NPC +
+      // shop + boss-FSM surfaces (talk/buy/sell handlers, the
+      // shop-stock / shop-price roll domains, the boss FSM phase
+      // transitions, or the boss-room spawn override) surfaces here
+      // in any runtime (Node, Chromium, Firefox, WebKit).
+      const result = runScripted({
+        inputs: SELF_TEST_WIN_INPUTS,
+        actions: SELF_TEST_WIN_LOG,
+      });
+      assert(
+        result.outcome === "won",
+        `win-cross-runtime-digest: outcome must be "won", got "${result.outcome}"`,
+      );
+      const got = sha256Hex(result.finalState.stateHash);
+      assert(
+        got === WIN_DIGEST,
+        `win-cross-runtime-digest mismatch: actual=${got}`,
       );
     },
   },

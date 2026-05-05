@@ -88,6 +88,27 @@ function stubManifest(): AtlasManifest {
     tilesHigh: 1,
     tilesWide: 1,
   });
+  sprites.set("npc.fixer", {
+    atlasX: 10,
+    atlasY: 1,
+    recipeId: "atlas-recipe.cyberpunk.npc.fixer",
+    tilesHigh: 1,
+    tilesWide: 1,
+  });
+  sprites.set("npc.info-broker", {
+    atlasX: 11,
+    atlasY: 1,
+    recipeId: "atlas-recipe.cyberpunk.npc.info-broker",
+    tilesHigh: 1,
+    tilesWide: 1,
+  });
+  sprites.set("monster.boss.black-ice-v0", {
+    atlasX: 12,
+    atlasY: 1,
+    recipeId: "atlas-recipe.cyberpunk.boss.black-ice-v0",
+    tilesHigh: 1,
+    tilesWide: 1,
+  });
   sprites.set("player", {
     atlasX: 6,
     atlasY: 0,
@@ -321,5 +342,105 @@ describe("drawScene — defensive paths", () => {
       atlasImage: {} as unknown as CanvasImageSource,
     };
     expect(() => drawScene(target, initialState)).toThrow(/player/);
+  });
+});
+
+describe("drawScene — Phase 7.A.2b NPC + boss sprite rendering", () => {
+  it("emits a drawImage call for every NPC at its (x, y) cell", () => {
+    const canvas = new StubCanvas();
+    const target: RenderTarget = {
+      canvas: canvas as unknown as HTMLCanvasElement,
+      atlas: loadedAtlas(),
+      atlasImage: {} as unknown as CanvasImageSource,
+    };
+    drawScene(target, initialState);
+    const npcs = initialState.floorState.npcs;
+    expect(npcs.length).toBeGreaterThan(0);
+    for (const n of npcs) {
+      const dx = n.pos.x * TILE_SIZE;
+      const dy = n.pos.y * TILE_SIZE;
+      const matches = canvas.ctx.drawCalls.filter(
+        (c) => c.dx === dx && c.dy === dy,
+      );
+      // At least one drawImage call lands at the NPC's cell (one for
+      // the floor tile beneath, plus one for the NPC sprite on top).
+      expect(matches.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("renders the boss with its dedicated sprite slot on floor 10", () => {
+    // Build a synthetic floor-10 state by inserting a boss monster
+    // into `initialState`'s monsters collection. The renderer reads
+    // `m.kind` to choose the slot — synthetic state is sufficient.
+    const synth: RunState = {
+      ...initialState,
+      floorState: {
+        ...initialState.floorState,
+        monsters: [
+          {
+            id: 99,
+            kind: "monster.boss.black-ice-v0",
+            pos: { y: 4, x: 5 },
+            hp: 24,
+            hpMax: 24,
+            atk: 6,
+            def: 4,
+            aiState: "boss-phase-1",
+          },
+        ],
+      },
+    };
+    const canvas = new StubCanvas();
+    const target: RenderTarget = {
+      canvas: canvas as unknown as HTMLCanvasElement,
+      atlas: loadedAtlas(),
+      atlasImage: {} as unknown as CanvasImageSource,
+    };
+    drawScene(target, synth);
+    // The boss sprite slot is at (12, 1) in the stubManifest. Its pixel
+    // coordinates are atlasX*(TILE_SIZE+TILE_PADDING) = 12*17 = 204 and
+    // atlasY*(TILE_SIZE+TILE_PADDING) = 1*17 = 17. Find a draw call
+    // sourcing those coordinates onto the boss's destination cell.
+    const dx = 5 * TILE_SIZE;
+    const dy = 4 * TILE_SIZE;
+    const bossDraws = canvas.ctx.drawCalls.filter(
+      (c) => c.dx === dx && c.dy === dy && c.sx === 204 && c.sy === 17,
+    );
+    expect(bossDraws.length).toBe(1);
+  });
+
+  it("falls back to monster.ice.daemon sprite for non-boss monsters", () => {
+    const synth: RunState = {
+      ...initialState,
+      floorState: {
+        ...initialState.floorState,
+        monsters: [
+          {
+            id: 99,
+            kind: "monster.ice.daemon",
+            pos: { y: 6, x: 7 },
+            hp: 4,
+            hpMax: 4,
+            atk: 2,
+            def: 0,
+            aiState: "idle",
+          },
+        ],
+      },
+    };
+    const canvas = new StubCanvas();
+    const target: RenderTarget = {
+      canvas: canvas as unknown as HTMLCanvasElement,
+      atlas: loadedAtlas(),
+      atlasImage: {} as unknown as CanvasImageSource,
+    };
+    drawScene(target, synth);
+    // monster.ice.daemon is at (3, 0) in stubManifest → sx=51, sy=0.
+    const dx = 7 * TILE_SIZE;
+    const dy = 6 * TILE_SIZE;
+    const daemonDraws = canvas.ctx.drawCalls.filter(
+      (c) => c.dx === dx && c.dy === dy && c.sx === 51 && c.sy === 0,
+    );
+    expect(daemonDraws.length).toBe(1);
   });
 });

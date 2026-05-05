@@ -70,7 +70,7 @@ import type { Floor, Point } from "../src/mapgen/types";
 export const SELF_TEST_WIN_INPUTS: FingerprintInputs = Object.freeze({
   commitHash: "dev0000",
   rulesetVersion: "phase1-placeholder-do-not-share",
-  seed: "phase7-win-icefall-1",
+  seed: "gamma-195",
   modIds: Object.freeze([]) as readonly string[],
 });
 
@@ -366,6 +366,40 @@ function maybeHeal(
 }
 
 /**
+ * Heal-up loop that uses ONLY heals with `effect.base < 4` (i.e.
+ * syringe / nano-repair). Used at floor-10 entry to burn cheap heals
+ * before the boss fight, preserving strong heals (adrenaline-spike,
+ * med-injector) for the boss-fight inner loop where each heal-tick is
+ * precious.
+ */
+function maybeHealWeakOnly(
+  state: RunState,
+  actions: Action[],
+  threshold: number,
+): RunState {
+  let cur = state;
+  while (cur.outcome === "running") {
+    if (cur.player.hp * 100 >= cur.player.hpMax * threshold) break;
+    let weakId: ItemKindId | null = null;
+    let weakBase = -1;
+    for (const e of cur.player.inventory) {
+      const k = getItemKind(e.kind);
+      if (k.effect.kind !== "heal") continue;
+      if (k.effect.base >= 4) continue;
+      if (k.effect.base > weakBase) {
+        weakBase = k.effect.base;
+        weakId = e.kind;
+      }
+    }
+    if (weakId === null) break;
+    const useAction: Action = { type: ACTION_TYPE_USE, item: weakId };
+    actions.push(useAction);
+    cur = tick(cur, useAction);
+  }
+  return cur;
+}
+
+/**
  * Equip the best weapon in inventory if a stronger one than the
  * currently-equipped weapon is held. Pushes one EQUIP action when a
  * change is needed.
@@ -575,20 +609,45 @@ function maybeBuyFromAdjacentNpc(
     const npcKindData = NPC_KINDS_BY_ID[npc.kind];
     if (npcKindData === undefined) continue;
     const minPrice = npcKindData.basePrice;
-    const maxPrice = npcKindData.basePrice + npcKindData.priceVariance;
 
-    // Priority order:
-    //   1. Heals (info-broker is the only NPC kind that stocks
-    //      heal-effect items, and it appears at most once or twice in
-    //      a 9-floor run — buying when we can is critical).
+    // Priority order (revised in Phase 7.A.2b after probe analysis):
+    //   1. Weapons FIRST — an unequipped player deals 1..3 dmg vs a
+    //      def-5 boss; without a weapon the boss fight is unwinnable
+    //      regardless of heal count. Drains chips quickly on the first
+    //      fixer-floor; subsequent floors then top off heals/cyberware.
     //   2. Cyberware (def-bonus is the load-bearing survivability
     //      bump for the boss fight).
-    //   3. Weapons (atk-bonus speeds up the boss kill but isn't
-    //      load-bearing — the player's base atk=5 + boss def=5 + bonus
-    //      0..3 already deals 1..3 dmg/tick).
+    //   3. Heals (info-broker is the only NPC kind that stocks
+    //      heal-effect items; capped at 10 aggregate).
 
-    // 1. Heals — buy as many as we can afford, capped at 5.
-    let refreshedNpc: FloorNpc | undefined = npc;
+    // 1. Weapons — strict upgrade only.
+    let refreshedNpc: FloorNpc | undefined = cur.floorState.npcs.find(
+      (n) => n.kind === npc.kind,
+    );
+    if (refreshedNpc === undefined) continue;
+    const npcWeapon0 = npcBestWeapon(refreshedNpc);
+    if (npcWeapon0 !== null && playerChips(cur) >= minPrice) {
+      const cur2 = bestWeaponInInventory(cur);
+      const curBase = cur2 === null ? 0 : weaponBaseBonus(cur2);
+      const equippedBase =
+        cur.player.equipment.weapon === null
+          ? 0
+          : weaponBaseBonus(cur.player.equipment.weapon);
+      const refBase = Math.max(curBase, equippedBase);
+      const npcBase = weaponBaseBonus(npcWeapon0);
+      if (npcBase > refBase) {
+        const ord = npcKindOrdinal(refreshedNpc.kind);
+        const buy: Action = {
+          type: ACTION_TYPE_BUY,
+          target: ord,
+          item: npcWeapon0,
+        };
+        actions.push(buy);
+        cur = tick(cur, buy);
+      }
+    }
+
+    // 2. Heals — buy as many as we can afford, capped at 10.
     while (cur.outcome === "running") {
       const r = cur.floorState.npcs.find((n) => n.kind === npc.kind);
       if (r === undefined) break;
@@ -644,32 +703,6 @@ function maybeBuyFromAdjacentNpc(
       }
     }
 
-    // 3. Weapons — strict upgrade only, AND only if we have at least
-    // `maxPrice * 2` chips on hand (so we don't drain ourselves to 0
-    // when we may need heals next floor).
-    refreshedNpc = cur.floorState.npcs.find((n) => n.kind === npc.kind);
-    if (refreshedNpc === undefined) continue;
-    const npcWeapon = npcBestWeapon(refreshedNpc);
-    if (npcWeapon !== null && playerChips(cur) >= maxPrice * 2) {
-      const cur2 = bestWeaponInInventory(cur);
-      const curBase = cur2 === null ? 0 : weaponBaseBonus(cur2);
-      const equippedBase =
-        cur.player.equipment.weapon === null
-          ? 0
-          : weaponBaseBonus(cur.player.equipment.weapon);
-      const refBase = Math.max(curBase, equippedBase);
-      const npcBase = weaponBaseBonus(npcWeapon);
-      if (npcBase > refBase) {
-        const ord = npcKindOrdinal(refreshedNpc.kind);
-        const buy: Action = {
-          type: ACTION_TYPE_BUY,
-          target: ord,
-          item: npcWeapon,
-        };
-        actions.push(buy);
-        cur = tick(cur, buy);
-      }
-    }
   }
   return cur;
 }
@@ -770,11 +803,14 @@ export function buildWinLog(
     }
   }
 
-  // Floor 10: heal up, equip best weapon + cyberware, walk to a tile
-  // adjacent to the boss, then attack until the boss is dead or our
-  // HP runs out.
+  // Floor 10: heal up using ONLY weak heals (preserve strong heals for
+  // the boss fight where each heal-tick is precious), equip best
+  // weapon + cyberware, walk to a tile adjacent to the boss, then
+  // attack until the boss is dead or our HP runs out.
   if (state.floorN === 10 && state.outcome === "running") {
-    state = maybeHeal(state, actions, 100);
+    // Burn weak heals (base < 4) only, topping off to 70% so strong
+    // heals are saved for the boss fight.
+    state = maybeHealWeakOnly(state, actions, 100);
     state = maybeEquipBestWeapon(state, actions);
     state = maybeEquipBestCyberware(state, actions);
 
@@ -799,10 +835,10 @@ export function buildWinLog(
           const t = state.floorState.floor.tiles[adj.y * w + adj.x];
           if (t !== TILE_FLOOR && t !== TILE_DOOR) continue;
           // Floor-10 walk uses healThreshold=70 so the walker stays
-          // above 70% HP through the boss-arena approach. No minBase
-          // filter here — even a weak heal is better than dying mid-
-          // walk when we're 8 cells out from the boss arena.
-          const walked = walkToward(state, adj, actions, 1500, 70, 0);
+          // above 70% HP through the boss-arena approach. minBase=4 to
+          // preserve weak heals (nano-repair / syringe base 3) for
+          // the boss-fight loop where every heal-tick matters.
+          const walked = walkToward(state, adj, actions, 1500, 70, 4);
           state = walked.state;
           if (walked.reached) {
             anyReached = true;

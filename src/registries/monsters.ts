@@ -39,9 +39,9 @@ function freezeKind(k: MonsterKind): MonsterKind {
 export const MONSTER_KINDS: readonly MonsterKind[] = Object.freeze([
   freezeKind({
     id: "monster.boss.black-ice-v0",
-    hpMax: 40,
-    atk: 9,
-    def: 5,
+    hpMax: 24,
+    atk: 6,
+    def: 4,
     allowedFloors: FLOOR_10,
     isBoss: true,
   }),

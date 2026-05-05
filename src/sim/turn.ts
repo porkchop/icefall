@@ -252,31 +252,6 @@ function npcsReplaceAt(
 }
 
 /**
- * Add one unit of `kind` to the NPC's inventory, preserving the
- * Phase 6 sorted-inventory comparator (kind ASC, count DESC). Pure —
- * delegates to a local copy of the comparator (the `inventoryAdd`
- * helper from `src/sim/inventory.ts` is the canonical implementation;
- * inlined here against `FloorNpc.inventory` to avoid a circular
- * import path).
- */
-function npcInventoryAdd(
-  inv: readonly InventoryEntry[],
-  kind: import("../registries/items").ItemKindId,
-  count: number,
-): readonly InventoryEntry[] {
-  // Re-uses the Phase 6 inventoryAdd contract via direct call.
-  return inventoryAdd(inv, kind, count);
-}
-
-function npcInventoryRemove(
-  inv: readonly InventoryEntry[],
-  kind: import("../registries/items").ItemKindId,
-  count: number,
-): readonly InventoryEntry[] {
-  return inventoryRemove(inv, kind, count);
-}
-
-/**
  * Phase 7.A.2 boss FSM transition table. Returns the `MonsterAIState`
  * the boss should occupy given its current phase + integer HP / hpMax.
  * Transitions are deterministic — no random — and trigger purely on
@@ -382,8 +357,8 @@ export function tick(state: RunState, action: Action): RunState {
   // the NPC inventory, the new array is staged here and merged into
   // the returned FloorState below. Most actions don't touch NPCs, so
   // the default is to forward `state.floorState.npcs` unchanged.
-  let _shopNextNpcs: readonly FloorNpc[] = state.floorState.npcs;
-  let _shopNpcsTouched = false;
+  let shopNextNpcs: readonly FloorNpc[] = state.floorState.npcs;
+  let shopNpcsTouched = false;
 
   // Resolve player action. Switch/case on action.type so Phase 6+
   // additions register as explicit cases — Phase 3.A.2 carry-forward
@@ -674,8 +649,8 @@ export function tick(state: RunState, action: Action): RunState {
               if (playerChips >= price) {
                 // Transfer: NPC inventory -= itemId; player += itemId.
                 // Player chips -= price; NPC chips += price.
-                const newNpcInv = npcInventoryAdd(
-                  npcInventoryRemove(npc.inventory, itemId, 1),
+                const newNpcInv = inventoryAdd(
+                  inventoryRemove(npc.inventory, itemId, 1),
                   "item.cred-chip",
                   price,
                 );
@@ -700,8 +675,8 @@ export function tick(state: RunState, action: Action): RunState {
       }
       // Carry the (possibly mutated) npcs through the FloorState write
       // path below.
-      _shopNextNpcs = nextNpcs;
-      _shopNpcsTouched = true;
+      shopNextNpcs = nextNpcs;
+      shopNpcsTouched = true;
       break;
     }
     case ACTION_TYPE_SELL: {
@@ -743,10 +718,10 @@ export function tick(state: RunState, action: Action): RunState {
                 "item.cred-chip",
                 sellPrice,
               );
-              let newNpcInv = npcInventoryAdd(npc.inventory, itemId, 1);
+              let newNpcInv = inventoryAdd(npc.inventory, itemId, 1);
               const npcChips = credChipCount(newNpcInv);
               if (npcChips >= sellPrice) {
-                newNpcInv = npcInventoryRemove(
+                newNpcInv = inventoryRemove(
                   newNpcInv,
                   "item.cred-chip",
                   sellPrice,
@@ -764,8 +739,8 @@ export function tick(state: RunState, action: Action): RunState {
           }
         }
       }
-      _shopNextNpcs = nextNpcs;
-      _shopNpcsTouched = true;
+      shopNextNpcs = nextNpcs;
+      shopNpcsTouched = true;
       break;
     }
     default:
@@ -958,9 +933,9 @@ export function tick(state: RunState, action: Action): RunState {
           monsters: nextMonsters,
           items: nextFloorItems,
           // Phase 7.A.2 — forward the (possibly mutated) NPC list. The
-          // shop handlers stage their writes through `_shopNextNpcs`;
+          // shop handlers stage their writes through `shopNextNpcs`;
           // every other path forwards the input unchanged.
-          npcs: _shopNpcsTouched ? _shopNextNpcs : state.floorState.npcs,
+          npcs: shopNpcsTouched ? shopNextNpcs : state.floorState.npcs,
         },
     player: nextPlayer,
     outcome,

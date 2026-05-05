@@ -22,6 +22,7 @@
  *   - `state.floorState.floor.{width,height}` — for canvas dimensions
  *   - `state.floorState.monsters`             — sorted by id
  *   - `state.floorState.items`                — sorted by (y, x, kind)
+ *   - `state.floorState.npcs`                 — sorted by (kind, y, x)
  *   - `state.player.pos`                      — player cell
  *
  * Tile→slot mapping:
@@ -31,13 +32,16 @@
  *   - TILE_DOOR  (3) — `tile.door.cyberdoor`
  *   - other          — no draw (defensive; codes 4..255 reserved)
  *
- * Monster→slot: every monster maps to `monster.ice.daemon` in Phase 5
- * (the registry has more entries but only one recipe ships in the
- * atlas; Phase 6+ extends this).
+ * Monster→slot: the boss (`monster.boss.black-ice-v0`) renders with
+ * its dedicated boss sprite; every other monster falls back to
+ * `monster.ice.daemon` (the only non-boss monster recipe shipped to
+ * date).
  *
  * Item→slot: the FloorItem's `kind` (an `ItemKindId` like
- * `item.cred-chip`) is used directly as the atlas slot id. Phase 5
- * ships only `item.cred-chip` placeholders.
+ * `item.cred-chip`) is used directly as the atlas slot id.
+ *
+ * NPC→slot: the FloorNpc's `kind` (an `NpcKindId` like `npc.fixer`)
+ * is used directly as the atlas slot id (Phase 7.A.2b).
  *
  * Player→slot: `player`.
  */
@@ -84,6 +88,8 @@ const SLOT_TILE_WALL = "tile.wall.cyberfloor_01";
 const SLOT_TILE_DOOR = "tile.door.cyberdoor";
 const SLOT_PLAYER = "player";
 const SLOT_MONSTER_DEFAULT = "monster.ice.daemon";
+const SLOT_MONSTER_BOSS = "monster.boss.black-ice-v0";
+const KIND_MONSTER_BOSS = "monster.boss.black-ice-v0";
 
 /**
  * Background fill color used to clear the canvas before tile blits.
@@ -140,9 +146,9 @@ function spritePixelCoord(
  * Draw the entire scene from `state` onto `target.canvas`. Pure
  * function-of-state: same `RunState` + same atlas → same canvas pixels.
  *
- * Layering: tiles → items → monsters → player. (Items can be picked up
- * in a later phase, so they live under monster sprites; the player is
- * always on top so it cannot be visually occluded.)
+ * Layering: tiles → items → NPCs → monsters → player. NPCs are
+ * stationary and never visually occlude monsters; monsters never
+ * visually occlude the player.
  */
 export function drawScene(target: RenderTarget, state: RunState): void {
   const floor = state.floorState.floor;
@@ -201,12 +207,36 @@ export function drawScene(target: RenderTarget, state: RunState): void {
     );
   }
 
-  // Monsters (only living ones; hp === 0 are removed visually).
+  // NPCs (Phase 7.A.2b). NPCs draw under monsters so a chasing monster
+  // visually occludes a stationary NPC. The slot id is the NpcKindId
+  // string directly.
+  const npcs = state.floorState.npcs;
+  for (let i = 0; i < npcs.length; i++) {
+    const n = npcs[i]!;
+    const { sx, sy } = spritePixelCoord(target.atlas, n.kind);
+    ctx.drawImage(
+      target.atlasImage,
+      sx,
+      sy,
+      TILE_SIZE,
+      TILE_SIZE,
+      n.pos.x * TILE_SIZE,
+      n.pos.y * TILE_SIZE,
+      TILE_SIZE,
+      TILE_SIZE,
+    );
+  }
+
+  // Monsters (only living ones; hp === 0 are removed visually). The
+  // boss draws via its dedicated sprite slot; all other monsters fall
+  // back to the default `monster.ice.daemon` slot.
   const monsters = state.floorState.monsters;
   for (let i = 0; i < monsters.length; i++) {
     const m = monsters[i]!;
     if (m.hp <= 0) continue;
-    const { sx, sy } = spritePixelCoord(target.atlas, SLOT_MONSTER_DEFAULT);
+    const slot =
+      m.kind === KIND_MONSTER_BOSS ? SLOT_MONSTER_BOSS : SLOT_MONSTER_DEFAULT;
+    const { sx, sy } = spritePixelCoord(target.atlas, slot);
     ctx.drawImage(
       target.atlasImage,
       sx,
