@@ -82,6 +82,38 @@ export const ACTION_TYPES_PHASE_6: readonly string[] = Object.freeze([
 ]);
 
 /**
+ * Phase 7.A.2 additive action vocabulary (Phase 7 frozen contract:
+ * NPCs + shops + boss). Three new types — all reuse the existing
+ * `TAG_TARGET = 0x10` + `TAG_ITEM = 0x20` wire tags. No
+ * `ACTION_VERSION` bump per the Phase 1 frozen "additive vocabulary"
+ * rule.
+ *
+ * Required fields:
+ *   - `talk` — `target` (NPC kind ordinal); no `item`. Validates
+ *     player adjacency to the NPC at the encoded ordinal; otherwise a
+ *     no-op. The dialog itself is a UI-side concern; `talk` exists as
+ *     a state-hash-anchored "I'm interacting" marker for replay
+ *     determinism.
+ *   - `buy` — `target` (NPC ordinal) + `item` (`ItemKindId` to
+ *     purchase). The handler verifies NPC adjacency, item-in-stock,
+ *     player-can-afford-the-price (in `item.cred-chip`), then transfers
+ *     item↔chips between NPC and player inventories.
+ *   - `sell` — inverse of `buy`. Transfers `item` from player to NPC
+ *     inventory and pays out `cred-chip` at half the buy price (floor
+ *     1 minimum).
+ */
+export const ACTION_TYPE_TALK = "talk" as const;
+export const ACTION_TYPE_BUY = "buy" as const;
+export const ACTION_TYPE_SELL = "sell" as const;
+
+export const ACTION_TYPES_PHASE_7: readonly string[] = Object.freeze([
+  ...ACTION_TYPES_PHASE_6,
+  ACTION_TYPE_TALK,
+  ACTION_TYPE_BUY,
+  ACTION_TYPE_SELL,
+]);
+
+/**
  * Direction ordinals — frozen by addendum N4. The eight directions in
  * lexicographic-tiebreak order, with `(dy, dx)` deltas where y increases
  * southward (matching `Floor.tiles[y * width + x]` row-major addressing).

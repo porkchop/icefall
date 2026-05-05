@@ -15,36 +15,37 @@ const SIM_DIGEST =
 // and the new entries fill the next three slots in the same row).
 // The new ATLAS_DIGEST + 4 preset-seed expectedHash values replace
 // the Phase 6.A.2 goldens literally here per memo addendum N12.
+// Phase 7.A.2 bumps these again to reflect the new NPC + boss recipes.
 const ATLAS_DIGEST =
-  "a3f7e3caa857b5edbd1728a874b858484e58150658277a54dc9506f0489edb08";
+  "8ca99389737be61536458fd39dbf067af6959d207151566ddf9233fced390c3a";
 
 // Phase 4 preset-seed expectedHash values (memo addendum N12). Pinned
 // in `src/atlas/preset-seeds.ts` and re-asserted here for the live
-// browser environment. Bumped to the new bytes in Phase 7.A.1.
+// browser environment. Bumped to the new bytes in Phase 7.A.2.
 const PRESET_HASHES: { id: string; seed: string; expectedHash: string }[] = [
   {
     id: "placeholder",
     seed: "icefall-phase4-placeholder-atlas-seed",
     expectedHash:
-      "a3f7e3caa857b5edbd1728a874b858484e58150658277a54dc9506f0489edb08",
+      "8ca99389737be61536458fd39dbf067af6959d207151566ddf9233fced390c3a",
   },
   {
     id: "variant-A",
     seed: "icefall-atlas-variant-A",
     expectedHash:
-      "5fea9dee7b220a5689eefaeecff0d44b302e1f2fa5554d499fce57a9e979dcd8",
+      "9454e7223403ca23cea42185d70862a8cfab57a45b93dd16c333ef4feaee5bc5",
   },
   {
     id: "variant-B",
     seed: "icefall-atlas-variant-B",
     expectedHash:
-      "61f8b72f24c98bb1e65b340e5c5b5dd7a3f0cd6f7801644a15fa701d1c5d2056",
+      "511f5ce57af4bd59d8caf668da18ef767cf4b74c21ebc6fc64ed4f168d08b3ad",
   },
   {
     id: "variant-C",
     seed: "icefall-atlas-variant-C",
     expectedHash:
-      "51ac6293c0953047c3eb27aece3275cd6c17537fa68a74f75d480821c772893f",
+      "4bdf8392186cf7c1b6885c6e9f8839c165b755271cea46293ea5b59f74bb8c36",
   },
 ];
 

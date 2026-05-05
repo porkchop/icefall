@@ -57,6 +57,13 @@ import { recipeItemWeaponSmg } from "../atlas/recipes/item-weapon-smg";
 import { recipeItemStimPatch } from "../atlas/recipes/item-stim-patch";
 import { recipeItemTraumaPack } from "../atlas/recipes/item-trauma-pack";
 import { recipeItemCyberdeckMod1 } from "../atlas/recipes/item-cyberdeck-mod-1";
+// Phase 7.A.2 additions (positions 26+ in the array — appended).
+// Wires NPC + boss content per Phase 7 frozen contract. Coordinate-
+// stable for the 26 earlier sprites; new entries slot at row-major
+// positions (10,1), (11,1), (12,1).
+import { recipeNpcFixer } from "../atlas/recipes/npc-fixer";
+import { recipeNpcInfoBroker } from "../atlas/recipes/npc-info-broker";
+import { recipeMonsterBossBlackIce } from "../atlas/recipes/monster-boss-black-ice";
 
 export type AtlasSlotId =
   // Phase 4 frozen seven (do NOT reorder).
@@ -89,7 +96,13 @@ export type AtlasSlotId =
   // Phase 7.A.1 additions (close Phase 6.A.2 N4 carry-forward).
   | "item.stim-patch"
   | "item.trauma-pack"
-  | "item.cyberdeck-mod-1";
+  | "item.cyberdeck-mod-1"
+  // Phase 7.A.2 additions (NPC + boss). Slot ids match the
+  // corresponding `NpcKindId` / `MonsterKindId` so the renderer can
+  // look them up directly via the entity's `kind` field.
+  | "npc.fixer"
+  | "npc.info-broker"
+  | "monster.boss.black-ice-v0";
 
 export type Recipe = (
   prng: PRNG,
@@ -310,6 +323,32 @@ export const ATLAS_RECIPES: readonly AtlasRecipeEntry[] = Object.freeze([
     tilesWide: 1,
     tilesHigh: 1,
     slot: "item.cyberdeck-mod-1",
+  }),
+  // ----- Phase 7.A.2 — NPC + boss content -----
+  // Order within the Phase 7.A.2 block is the order required to slot
+  // at (10,1), (11,1), (12,1) on the 16-wide × 8-high atlas grid.
+  // Bumping this order would shift `(atlasX, atlasY)` for these
+  // 3 sprites; frozen at landing.
+  Object.freeze({
+    id: "atlas-recipe.cyberpunk.npc.fixer",
+    recipe: recipeNpcFixer,
+    tilesWide: 1,
+    tilesHigh: 1,
+    slot: "npc.fixer",
+  }),
+  Object.freeze({
+    id: "atlas-recipe.cyberpunk.npc.info-broker",
+    recipe: recipeNpcInfoBroker,
+    tilesWide: 1,
+    tilesHigh: 1,
+    slot: "npc.info-broker",
+  }),
+  Object.freeze({
+    id: "atlas-recipe.cyberpunk.boss.black-ice-v0",
+    recipe: recipeMonsterBossBlackIce,
+    tilesWide: 1,
+    tilesHigh: 1,
+    slot: "monster.boss.black-ice-v0",
   }),
 ]);
 

@@ -102,13 +102,13 @@ describe("runScripted — terminal outcome short-circuits", () => {
   });
 });
 
-describe("buildInitialRunState — floor-1 entry block consumes mapgen:1 + sim:1", () => {
-  it("freshly-allocated streams record exactly mapgen:1 and sim:1 after the call", () => {
+describe("buildInitialRunState — floor-1 entry block consumes mapgen:1 + sim:1 + npc-stock:1", () => {
+  it("freshly-allocated streams record exactly mapgen:1, sim:1, and npc-stock:1 after the call (Phase 7.A.2: NPC stock is a per-floor stream so SIM_DIGEST stays preserved)", () => {
     const streams = streamsForRun(seedToBytes(TEST_INPUTS.seed));
     expect([...streams.__consumed]).toEqual([]);
     buildInitialRunState(TEST_INPUTS, streams);
     const after = [...streams.__consumed].sort();
-    expect(after).toEqual(["mapgen:1", "sim:1"]);
+    expect(after).toEqual(["mapgen:1", "npc-stock:1", "sim:1"]);
   });
 
   it("returns RunState with floorN=1, outcome=running, no pending entry", () => {

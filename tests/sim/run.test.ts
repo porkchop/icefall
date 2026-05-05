@@ -85,18 +85,57 @@ describe("uniformIndex — integer-only rejection sampling", () => {
 });
 
 describe("spawnFloorEntities", () => {
-  it("consumes exactly one stream key (sim:<floorN>) per call", () => {
+  it("consumes exactly two stream keys (sim:<floorN> + npc-stock:<floorN>) per call on floors 1..9 (Phase 7.A.2: NPC stock is a separate per-floor stream so SIM_DIGEST stays preserved)", () => {
     const streams = freshStreams();
     const before = [...streams.__consumed].sort();
     const floor = generateFloor(3, streams);
     const beforeSpawn = [...streams.__consumed].sort();
     spawnFloorEntities(3, floor, streams);
     const after = [...streams.__consumed].sort();
-    // The floor-1-entry test below covers the full delta; here we just
-    // check that exactly one new key appeared after spawn.
-    expect(after.length).toBe(beforeSpawn.length + 1);
+    // Two new keys: sim:3 (monster spawn) + npc-stock:3 (NPC kind +
+    // stock roll).
+    expect(after.length).toBe(beforeSpawn.length + 2);
     expect(after.includes("sim:3")).toBe(true);
+    expect(after.includes("npc-stock:3")).toBe(true);
     expect(before.includes("sim:3")).toBe(false);
+    expect(before.includes("npc-stock:3")).toBe(false);
+  });
+
+  it("consumes only sim:10 on floor 10 (boss-only — no NPC spawn)", () => {
+    const streams = freshStreams();
+    const floor = generateFloor(10, streams);
+    const beforeSpawn = [...streams.__consumed].sort();
+    spawnFloorEntities(10, floor, streams);
+    const after = [...streams.__consumed].sort();
+    expect(after.length).toBe(beforeSpawn.length + 1);
+    expect(after.includes("sim:10")).toBe(true);
+    expect(after.includes("npc-stock:10")).toBe(false);
+  });
+
+  it("places exactly one NPC on floors 1..9", () => {
+    const streams = freshStreams();
+    const floor = generateFloor(2, streams);
+    const state = spawnFloorEntities(2, floor, streams);
+    expect(state.npcs.length).toBe(1);
+    expect(state.npcs[0]!.inventory.length).toBeGreaterThan(0);
+  });
+
+  it("places zero NPCs on floor 10", () => {
+    const streams = freshStreams();
+    const floor = generateFloor(10, streams);
+    const state = spawnFloorEntities(10, floor, streams);
+    expect(state.npcs.length).toBe(0);
+  });
+
+  it("floor 10 boss spawns with aiState 'boss-phase-1' (Phase 7.A.2 frozen contract)", () => {
+    const streams = freshStreams();
+    const floor = generateFloor(10, streams);
+    const state = spawnFloorEntities(10, floor, streams);
+    const boss = state.monsters.find(
+      (m) => m.kind === "monster.boss.black-ice-v0",
+    );
+    expect(boss).toBeDefined();
+    expect(boss!.aiState).toBe("boss-phase-1");
   });
 
   it("populates monsters at each combat slot whose floor is allowed", () => {

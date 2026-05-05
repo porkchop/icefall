@@ -24,9 +24,16 @@ import {
   type MonsterKind,
 } from "../registries/monsters";
 import type { ItemKindId } from "../registries/items";
+import {
+  NPC_KINDS,
+  type NpcKind,
+} from "../registries/npcs";
+import { TILE_FLOOR } from "../mapgen/tiles";
 import type {
   FloorItem,
+  FloorNpc,
   FloorState,
+  InventoryEntry,
   Monster,
   Player,
   RunState,
@@ -62,10 +69,27 @@ export function makeInitialPlayer(floor: Floor): Player {
  * (already sorted by `(kind, y, x)` — Phase 2 frozen) and for each
  * combat slot whose `allowedFloors` includes `floorN`, draws a
  * monster kind from the eligible pool with rejection-sampled uniform
- * indexing. Boss-arena slots on floor 10 spawn the boss; loot slots
+ * indexing. Boss-arena slots on floor 10 spawn the boss with
+ * `aiState = "boss-phase-1"` (Phase 7 frozen contract); loot slots
  * record an `item.cred-chip` placeholder.
  *
- * Consumes exactly one stream key: `"sim:" + floorN`.
+ * Phase 7.A.2 additions:
+ *   - One NPC per floor 1..9 (none on floor 10 — boss arena only).
+ *     The NPC kind is chosen by `uniformIndex(npcStockPrng,
+ *     NPC_KINDS.length)` against the per-floor `npcStock` stream
+ *     (so SIM_DIGEST stays preserved). Position is the entrance cell
+ *     plus a small fixed offset clamped to a walkable tile.
+ *   - NPC stock is rolled at spawn time, NOT per-action. For each item
+ *     in the kind's `stockTable`, include it iff `npcPrng() & 1`
+ *     evaluates to 1; included items are added with `count: 1`. The
+ *     stream is the `streams.npcStock(floorN)` cursor (Phase 7.A.2
+ *     domain anchor `shop:stock`); using the cursor directly keeps
+ *     shop generation hash-driven without per-action cursor
+ *     consumption (tick's __consumed-empty invariant intact).
+ *
+ * Consumes exactly two stream keys: `"sim:" + floorN` AND
+ * `"npc-stock:" + floorN`. The Phase 3 `__consumed`-delta self-test is
+ * extended in Phase 7.A.2 to assert both.
  */
 export function spawnFloorEntities(
   floorN: number,
@@ -100,7 +124,10 @@ export function spawnFloorEntities(
         });
       }
     } else if (slot.kind === "encounter.boss-arena.entry") {
-      // Spawn the boss inside the boss arena (centre).
+      // Spawn the boss inside the boss arena (centre). Phase 7.A.2:
+      // initial aiState is `"boss-phase-1"` (frozen contract — boss
+      // FSM transitions are deterministic, advancing only when the
+      // player attack drops boss HP below the integer thresholds).
       if (floorN === 10 && floor.bossArena !== null) {
         const arena = floor.bossArena;
         const cy = arena.y + (arena.h >>> 1);
@@ -114,7 +141,7 @@ export function spawnFloorEntities(
           hpMax: boss.hpMax,
           atk: boss.atk,
           def: boss.def,
-          aiState: "idle",
+          aiState: "boss-phase-1",
         });
       }
     } else if (slot.kind === "encounter.loot.basic") {
@@ -123,17 +150,101 @@ export function spawnFloorEntities(
     }
   }
 
+  // Phase 7.A.2 NPC spawn — one NPC on floors 1..9 (none on floor 10,
+  // which is boss-only). The NPC kind ordinal is rolled against the
+  // separate `streams.npcStock(floorN)` cursor so the existing
+  // `streams.simFloor(floorN)` consumption (monster spawn) is byte-
+  // identical to Phase 3 — keeps SIM_DIGEST preserved.
+  const npcs: FloorNpc[] = [];
+  if (floorN >= 1 && floorN <= 9) {
+    const npcPrng = streams.npcStock(floorN);
+    const ordinal = uniformIndex(npcPrng, NPC_KINDS.length);
+    const kind: NpcKind = NPC_KINDS[ordinal]!;
+    // Place the NPC at a deterministic walkable cell — the entrance
+    // cell plus a small fixed offset (`(0, +2)` when walkable, else
+    // the entrance itself). Avoids overlapping the player on initial
+    // spawn (the player is at `entrance`).
+    const npcPos = pickNpcPos(floor);
+    // Roll stock: each item in the kind's stockTable is included iff
+    // `npcPrng() & 1` evaluates to 1. Always include at least one
+    // item via a guarantee: if the random pass produces an empty
+    // stock, force-include the first item in the table.
+    const stockEntries: InventoryEntry[] = [];
+    for (let i = 0; i < kind.stockTable.length; i++) {
+      const include = (npcPrng() & 1) === 1;
+      if (include) {
+        stockEntries.push({ kind: kind.stockTable[i]!, count: 1 });
+      }
+    }
+    if (stockEntries.length === 0 && kind.stockTable.length > 0) {
+      stockEntries.push({ kind: kind.stockTable[0]!, count: 1 });
+    }
+    // Sort the stock by the Phase 6 inventory comparator (kind ASC,
+    // count DESC) so the NPC's inventory matches the player's
+    // sorting discipline.
+    stockEntries.sort((a, b) => {
+      if (a.kind < b.kind) return -1;
+      if (a.kind > b.kind) return 1;
+      if (a.count > b.count) return -1;
+      if (a.count < b.count) return 1;
+      return 0;
+    });
+    npcs.push({
+      kind: kind.id,
+      pos: npcPos,
+      inventory: Object.freeze(stockEntries),
+    });
+  }
+
   monsters.sort((a, b) => a.id - b.id);
   items.sort(
     (a, b) =>
       a.y - b.y || a.x - b.x || (a.kind < b.kind ? -1 : a.kind > b.kind ? 1 : 0),
   );
+  // NPCs sort by `kind` ASC, tie-break by `(y, x)` (Phase 7 frozen
+  // contract). Single-NPC-per-floor in Phase 7.A.2 makes this trivially
+  // sorted; the comparator is in place for the Phase 8+ multi-NPC case.
+  npcs.sort((a, b) => {
+    if (a.kind < b.kind) return -1;
+    if (a.kind > b.kind) return 1;
+    if (a.pos.y !== b.pos.y) return a.pos.y - b.pos.y;
+    return a.pos.x - b.pos.x;
+  });
 
   return {
     floor,
     monsters,
     items,
+    npcs,
   };
+}
+
+/**
+ * Pick an NPC position on the floor: the entrance cell offset by `(0,
+ * +2)` if walkable, else the entrance itself. Pure function. The
+ * fixed-offset strategy is deterministic (no PRNG consumption — the
+ * entrance is already pinned by mapgen and the same input produces the
+ * same output).
+ */
+function pickNpcPos(floor: Floor): { y: number; x: number } {
+  const ex = floor.entrance.x;
+  const ey = floor.entrance.y;
+  const tryX = ex + 2;
+  if (
+    tryX >= 0 &&
+    tryX < floor.width &&
+    ey >= 0 &&
+    ey < floor.height &&
+    floor.tiles[ey * floor.width + tryX] === TILE_FLOOR
+  ) {
+    return { y: ey, x: tryX };
+  }
+  // Fallback: entrance itself (player is there too on first arrival,
+  // but the renderer sorts by entity type — Phase 7.A.2 ships only one
+  // NPC per floor so collisions are tolerable). The Phase 3 BFS
+  // contract is unchanged: NPCs do not appear in `monsters` and are
+  // ignored by the AI distance map.
+  return { y: ey, x: ex };
 }
 
 /**

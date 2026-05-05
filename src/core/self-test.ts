@@ -89,7 +89,7 @@ export const SIM_DIGEST =
  * `architecture-red-team` review.
  */
 export const ATLAS_DIGEST =
-  "a3f7e3caa857b5edbd1728a874b858484e58150658277a54dc9506f0489edb08";
+  "8ca99389737be61536458fd39dbf067af6959d207151566ddf9233fced390c3a";
 
 /**
  * Hardcoded SHA-256 of the encoded PNG for a 16×16 single-color
@@ -375,14 +375,19 @@ const checks: Check[] = [
       const rootSeed = seedToBytes(SELF_TEST_INPUTS.seed);
       const streams = streamsForRun(rootSeed);
 
-      // Floor-1 entry block consumes mapgen:1 + sim:1.
+      // Phase 7.A.2: floor-1 entry block consumes mapgen:1 + sim:1 +
+      // npc-stock:1. The Phase 3 contract was extended with the new
+      // per-floor `npcStock(floorN)` stream so monster-spawn rolls in
+      // `streams.simFloor(1)` remain byte-identical (preserves
+      // SIM_DIGEST). NPCs are sourced from a separate stream entirely.
       const state0 = buildInitialRunState(SELF_TEST_INPUTS, streams);
       const afterEntry = [...streams.__consumed].sort();
       assert(
-        afterEntry.length === 2 &&
+        afterEntry.length === 3 &&
           afterEntry[0] === "mapgen:1" &&
-          afterEntry[1] === "sim:1",
-        `expected ['mapgen:1','sim:1'] after floor-1 entry, got ${JSON.stringify(afterEntry)}`,
+          afterEntry[1] === "npc-stock:1" &&
+          afterEntry[2] === "sim:1",
+        `expected ['mapgen:1','npc-stock:1','sim:1'] after floor-1 entry, got ${JSON.stringify(afterEntry)}`,
       );
 
       // One tick must consume nothing (per-tick __consumed-empty

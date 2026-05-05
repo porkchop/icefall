@@ -294,3 +294,21 @@ describe("simFloor accessor (Phase 3 addendum B4)", () => {
     expect(() => streams.simFloor(10)).not.toThrow();
   });
 });
+
+describe("npcStock accessor (Phase 7.A.2)", () => {
+  it("records npc-stock:<floorN> on first call and returns the deterministic stream", () => {
+    const streams = streamsForRun(ROOT_A);
+    const got = streams.npcStock(3);
+    expect([...streams.__consumed]).toEqual(["npc-stock:3"]);
+    const expected = streamPrng(ROOT_A, "npc-stock", 3);
+    for (let i = 0; i < 8; i++) expect(got()).toBe(expected());
+  });
+
+  it("rejects floorN outside 1..10 and non-integer values", () => {
+    const streams = streamsForRun(ROOT_A);
+    expect(() => streams.npcStock(0)).toThrowError(/floorN must be 1\.\.10/);
+    expect(() => streams.npcStock(11)).toThrowError(/floorN must be 1\.\.10/);
+    expect(() => streams.npcStock(1.5)).toThrowError(/floorN must be 1\.\.10/);
+    expect(() => streams.npcStock(NaN)).toThrowError(/floorN must be 1\.\.10/);
+  });
+});

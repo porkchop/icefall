@@ -22,6 +22,7 @@ import { startKeyboard, DEFAULT_KEY_BINDINGS } from "./input/keyboard";
 import { renderHud } from "./ui/hud";
 import { renderInventory } from "./ui/inventory";
 import { renderEquipment } from "./ui/equipment";
+import { renderWinScreen } from "./ui/win-screen";
 import type { RunState } from "./sim/types";
 import type { Action } from "./core/encode";
 
@@ -517,6 +518,12 @@ async function startGame(host: HTMLElement): Promise<void> {
   equipmentHost.id = "equipment";
   section.appendChild(equipmentHost);
 
+  // Phase 7.A.2 — win-screen panel (hidden when outcome !== "won").
+  const winScreenHost = el("section", "game-win-screen");
+  winScreenHost.id = "win-screen";
+  winScreenHost.style.display = "none";
+  section.appendChild(winScreenHost);
+
   host.appendChild(section);
 
   // 1. Load the atlas. The loader refuses PLACEHOLDER_RULESET_VERSION
@@ -573,6 +580,15 @@ async function startGame(host: HTMLElement): Promise<void> {
     renderHud(hudHost, state);
     renderInventory(inventoryHost, state);
     renderEquipment(equipmentHost, state);
+    // Phase 7.A.2 — show the win-screen only when outcome === "won".
+    // The renderer is idempotent so re-rendering on every tick is
+    // cheap; the host element's display is toggled by this branch.
+    if (state.outcome === "won") {
+      winScreenHost.style.display = "";
+      renderWinScreen(winScreenHost, state);
+    } else {
+      winScreenHost.style.display = "none";
+    }
     window.__GAME_STATE_HASH__ = sha256Hex(state.stateHash);
     window.__GAME_FLOOR__ = state.floorN;
     window.__GAME_HP__ = state.player.hp;

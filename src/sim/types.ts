@@ -12,6 +12,7 @@
 
 import type { Floor } from "../mapgen/types";
 import type { MonsterKindId } from "../registries/monsters";
+import type { NpcKindId } from "../registries/npcs";
 import type { ItemKindId } from "../registries/items";
 import type { FingerprintInputs } from "../core/fingerprint";
 
@@ -20,8 +21,23 @@ import type { FingerprintInputs } from "../core/fingerprint";
  */
 export type Point = { readonly x: number; readonly y: number };
 
-/** Monster AI FSM (Phase 3 decision 7). */
-export type MonsterAIState = "idle" | "chasing";
+/**
+ * Monster AI FSM. Phase 3 union extended in Phase 7.A.2 with three boss
+ * phase states (`docs/ARCHITECTURE.md` "Phase 7 frozen contracts"). The
+ * boss starts at `boss-phase-1`; transitions are PURELY DETERMINISTIC
+ * (no random; advance only via player attack actions that drop the
+ * boss HP below the integer thresholds 66% / 33%):
+ *   - phase-1 → phase-2 when `hp * 100 < hpMax * 66`
+ *   - phase-2 → phase-3 when `hp * 100 < hpMax * 33`
+ * Per-phase scaling adds to the registry-default atk/def at counter-attack
+ * time: phase-1 = +0/+0, phase-2 = +1/+0, phase-3 = +2/+1.
+ */
+export type MonsterAIState =
+  | "idle"
+  | "chasing"
+  | "boss-phase-1"
+  | "boss-phase-2"
+  | "boss-phase-3";
 
 /**
  * A single inventory stack — one item kind, positive integer count.
@@ -105,13 +121,33 @@ export type FloorItem = {
   readonly kind: ItemKindId;
 };
 
-/** State of the current floor — entities + items. Sorted by id / by
- *  `(y, x, kind)` for deterministic iteration.
+/**
+ * One non-combatant NPC placed on a floor. Phase 7 frozen contract
+ * (`docs/ARCHITECTURE.md` "Phase 7 frozen contracts (NPCs + shops + boss)"):
+ * NPCs are interaction targets, NOT combat entities — they have no
+ * `hp`/`atk`/`def`. Their `inventory` carries the NPC's shop stock at
+ * spawn time, sorted by the same Phase 6 inventory comparator (kind
+ * ASC, count DESC). The shop transaction handlers in `tick()` consume
+ * from this stock and replenish it with cred-chip currency on `buy`.
+ */
+export type FloorNpc = {
+  readonly kind: NpcKindId;
+  readonly pos: Point;
+  readonly inventory: readonly InventoryEntry[];
+};
+
+/**
+ * State of the current floor — entities + items + NPCs. Collections
+ * sorted by deterministic comparators:
+ *   - `monsters` by `id`
+ *   - `items` by `(y, x, kind)`
+ *   - `npcs` by `kind` ASC, tie-break by `(y, x)` (Phase 7 frozen contract)
  */
 export type FloorState = {
   readonly floor: Floor;
   readonly monsters: readonly Monster[];
   readonly items: readonly FloorItem[];
+  readonly npcs: readonly FloorNpc[];
 };
 
 /**

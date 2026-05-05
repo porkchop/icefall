@@ -126,6 +126,27 @@ export type RunStreams = {
    * pinned error message.
    */
   atlas(recipeId: string): PRNG;
+  /**
+   * Phase 7.A.2 frozen contract — `streams.npcStock(floorN)` accessor.
+   * Mirrors the `simFloor(floorN)` shape (Phase 3 frozen contract item
+   * 8 + addendum B4). Records `"npc-stock:" + floorN` into
+   * `__consumed`; the salt encoding `(name="npc-stock", salts=[floorN])`
+   * is byte-distinct from every other accessor's pre-image by
+   * construction.
+   *
+   * Introduced specifically to keep the Phase 3 SIM_DIGEST golden
+   * preserved when NPC spawn lands on floor 1 — the existing
+   * 100-action SELF_TEST_LOG re-enters floor 1's spawn block and
+   * monster-spawn rolls must keep consuming the SAME `simFloor(1)`
+   * cursor. NPC stock-roll consumes a separate stream so
+   * `streams.simFloor(1).next()` produces identical bytes after this
+   * change.
+   *
+   * `floorN` must satisfy `Number.isInteger(floorN) && 1 ≤ floorN ≤ 10`
+   * (same range as `simFloor`); violations throw `npcStock: floorN
+   * must be 1..10 (got N)`.
+   */
+  npcStock(floorN: number): PRNG;
   readonly __consumed: ReadonlySet<string>;
 };
 
@@ -191,6 +212,13 @@ export function streamsForRun(rootSeed: Uint8Array): RunStreams {
       validateRecipeId(recipeId);
       consumed.add(`atlas:${recipeId}`);
       return streamPrng(rootSeed, "atlas", recipeId);
+    },
+    npcStock(floorN: number): PRNG {
+      if (!Number.isInteger(floorN) || floorN < 1 || floorN > 10) {
+        throw new Error(`npcStock: floorN must be 1..10 (got ${floorN})`);
+      }
+      consumed.add(`npc-stock:${floorN}`);
+      return streamPrng(rootSeed, "npc-stock", floorN);
     },
     get __consumed(): ReadonlySet<string> {
       return consumed;

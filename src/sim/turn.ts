@@ -30,6 +30,9 @@ import {
   ACTION_TYPE_EQUIP,
   ACTION_TYPE_UNEQUIP,
   ACTION_TYPE_USE,
+  ACTION_TYPE_TALK,
+  ACTION_TYPE_BUY,
+  ACTION_TYPE_SELL,
   DIR_DELTAS,
 } from "./params";
 import {
@@ -42,7 +45,13 @@ import {
   ROLL_DOMAIN_ITEM_HEAL,
   ROLL_DOMAIN_ITEM_ATK_BONUS,
   ROLL_DOMAIN_ITEM_DEF_BONUS,
+  ROLL_DOMAIN_SHOP_PRICE,
 } from "./combat";
+import {
+  getNpcKind,
+  npcKindIdAtOrdinal,
+  type NpcKindId,
+} from "../registries/npcs";
 import {
   bfsDistanceMapFromPlayer,
   decideMonsterAction,
@@ -62,6 +71,8 @@ import type { Floor } from "../mapgen/types";
 import type {
   Equipment,
   FloorItem,
+  FloorNpc,
+  InventoryEntry,
   Monster,
   MonsterAIState,
   Player,
@@ -165,6 +176,158 @@ function resolveEffectBonus(
 }
 
 /**
+ * Find the index of an NPC of the given kind that is within Chebyshev
+ * distance 1 of the player's position. Returns `-1` if no matching NPC
+ * is adjacent. Phase 7.A.2 frozen contract: shop actions require the
+ * player to be adjacent to the target NPC; non-adjacent calls no-op.
+ */
+function findAdjacentNpcIndex(
+  npcs: readonly FloorNpc[],
+  player: Player,
+  kindId: NpcKindId,
+): number {
+  for (let i = 0; i < npcs.length; i++) {
+    const n = npcs[i]!;
+    if (n.kind !== kindId) continue;
+    const dy = n.pos.y - player.pos.y;
+    const dx = n.pos.x - player.pos.x;
+    const ady = dy < 0 ? -dy : dy;
+    const adx = dx < 0 ? -dx : dx;
+    // Adjacent or co-located (same cell at floor entry — see
+    // `pickNpcPos`'s fallback in `run.ts`).
+    if (ady <= 1 && adx <= 1) return i;
+  }
+  return -1;
+}
+
+/**
+ * Sum the count of `item.cred-chip` entries in an inventory. Used by
+ * the shop transaction handlers. The Phase 6 inventory shape stacks
+ * by kind so this is at most one entry's count, but iterating
+ * defensively is cheap and correct under any future stack-splitting.
+ */
+function credChipCount(inv: readonly InventoryEntry[]): number {
+  for (let i = 0; i < inv.length; i++) {
+    if (inv[i]!.kind === "item.cred-chip") return inv[i]!.count;
+  }
+  return 0;
+}
+
+/**
+ * Compute the effective buy/sell price for an NPC offering an item.
+ * Per the Phase 7 frozen "Deterministic shop-transaction resolution":
+ * `price = base + rollU32(stateHashPre, action, "shop:price", 0) %
+ * variance` when `variance > 0`, else `price = base`. Sell price is
+ * half the buy price (floor 1 minimum). All integer arithmetic.
+ */
+function shopBuyPrice(
+  basePrice: number,
+  variance: number,
+  stateHashPre: Uint8Array,
+  action: Action,
+): number {
+  if (variance <= 0) return basePrice;
+  const r = rollU32(stateHashPre, action, ROLL_DOMAIN_SHOP_PRICE, 0);
+  return basePrice + (r % variance);
+}
+
+function shopSellPrice(buyPrice: number): number {
+  // Integer half, floor at 1 — `>>> 1` is integer divide-by-2.
+  const half = buyPrice >>> 1;
+  return half < 1 ? 1 : half;
+}
+
+/**
+ * Replace the i-th entry in an `npcs` array, returning a new frozen
+ * array. Pure — preserves the Phase 7 frozen sort discipline.
+ */
+function npcsReplaceAt(
+  npcs: readonly FloorNpc[],
+  i: number,
+  replacement: FloorNpc,
+): readonly FloorNpc[] {
+  const next = npcs.slice();
+  next[i] = replacement;
+  return Object.freeze(next);
+}
+
+/**
+ * Add one unit of `kind` to the NPC's inventory, preserving the
+ * Phase 6 sorted-inventory comparator (kind ASC, count DESC). Pure —
+ * delegates to a local copy of the comparator (the `inventoryAdd`
+ * helper from `src/sim/inventory.ts` is the canonical implementation;
+ * inlined here against `FloorNpc.inventory` to avoid a circular
+ * import path).
+ */
+function npcInventoryAdd(
+  inv: readonly InventoryEntry[],
+  kind: import("../registries/items").ItemKindId,
+  count: number,
+): readonly InventoryEntry[] {
+  // Re-uses the Phase 6 inventoryAdd contract via direct call.
+  return inventoryAdd(inv, kind, count);
+}
+
+function npcInventoryRemove(
+  inv: readonly InventoryEntry[],
+  kind: import("../registries/items").ItemKindId,
+  count: number,
+): readonly InventoryEntry[] {
+  return inventoryRemove(inv, kind, count);
+}
+
+/**
+ * Phase 7.A.2 boss FSM transition table. Returns the `MonsterAIState`
+ * the boss should occupy given its current phase + integer HP / hpMax.
+ * Transitions are deterministic — no random — and trigger purely on
+ * threshold crossings: `hp * 100 < hpMax * 66` for phase-1→phase-2,
+ * `hp * 100 < hpMax * 33` for phase-2→phase-3.
+ *
+ * The boss's effective atk/def for damage calculation is derived from
+ * this state at counter-attack time (phase 1 = +0/+0, phase 2 = +1/+0,
+ * phase 3 = +2/+1) — see `bossPhaseScaling` below.
+ */
+function bossPhaseTransition(
+  current: MonsterAIState,
+  hp: number,
+  hpMax: number,
+): MonsterAIState {
+  // Integer threshold compare — no float.
+  const hpPct100 = hp * 100;
+  if (current === "boss-phase-1" && hpPct100 < hpMax * 66) {
+    return "boss-phase-2";
+  }
+  if (current === "boss-phase-2" && hpPct100 < hpMax * 33) {
+    return "boss-phase-3";
+  }
+  return current;
+}
+
+/**
+ * Per-phase atk/def increments applied at counter-attack time. Phase 1
+ * is the registry baseline; phases 2/3 add deterministic flat
+ * modifiers. Returns a `(atkBonus, defBonus)` tuple as integers.
+ */
+function bossPhaseScaling(
+  state: MonsterAIState,
+): { readonly atkBonus: number; readonly defBonus: number } {
+  if (state === "boss-phase-2") return { atkBonus: 1, defBonus: 0 };
+  if (state === "boss-phase-3") return { atkBonus: 2, defBonus: 1 };
+  // phase-1 / non-boss states: zero scaling.
+  return { atkBonus: 0, defBonus: 0 };
+}
+
+/**
+ * True iff this monster is the floor-10 boss (used to gate the FSM
+ * transition logic — non-boss monsters never carry a `boss-phase-*`
+ * aiState; the union is shared structurally but only the boss
+ * transitions through it).
+ */
+function isBossKind(kind: string): boolean {
+  return kind === "monster.boss.black-ice-v0";
+}
+
+/**
  * Returns the player's equipped weapon `ItemKind`, or `null` if no
  * weapon is equipped or the equipped id is not registered.
  */
@@ -215,6 +378,12 @@ export function tick(state: RunState, action: Action): RunState {
   let nextFloorN = state.floorN;
   let pendingFloorEntry = false;
   let outcome: RunOutcome = state.outcome;
+  // Phase 7.A.2 shop write-path: when a `buy` / `sell` action mutates
+  // the NPC inventory, the new array is staged here and merged into
+  // the returned FloorState below. Most actions don't touch NPCs, so
+  // the default is to forward `state.floorState.npcs` unchanged.
+  let _shopNextNpcs: readonly FloorNpc[] = state.floorState.npcs;
+  let _shopNpcsTouched = false;
 
   // Resolve player action. Switch/case on action.type so Phase 6+
   // additions register as explicit cases — Phase 3.A.2 carry-forward
@@ -285,8 +454,19 @@ export function tick(state: RunState, action: Action): RunState {
             baseBonus + weaponBonus,
           );
           const newHp = clampHp(target.hp, dmg);
+          // Phase 7.A.2 boss FSM transition: when the target is the
+          // boss and HP > 0 after damage, advance the phase based on
+          // integer threshold crossing. Non-boss targets retain their
+          // existing aiState path (idle/chasing) handled by the
+          // monster-tick block below.
+          let nextAiState: MonsterAIState = target.aiState;
+          if (isBossKind(target.kind) && newHp > 0) {
+            nextAiState = bossPhaseTransition(target.aiState, newHp, target.hpMax);
+          }
           nextMonsters = nextMonsters.map((m) =>
-            m.id === target.id ? { ...m, hp: newHp } : m,
+            m.id === target.id
+              ? { ...m, hp: newHp, aiState: nextAiState }
+              : m,
           );
         }
       }
@@ -445,6 +625,149 @@ export function tick(state: RunState, action: Action): RunState {
       }
       break;
     }
+    case ACTION_TYPE_TALK: {
+      // Phase 7.A.2: a state-hash-anchored "I'm interacting" marker.
+      // Validates that the player is adjacent to the encoded NPC kind;
+      // otherwise no-op. The dialog itself is a UI-side concern. The
+      // action's bytes still flow through the state-chain (advance has
+      // already been called above), so replays remain byte-identical.
+      const targetOrd = action.target;
+      if (targetOrd !== undefined) {
+        const npcKindId = npcKindIdAtOrdinal(targetOrd);
+        if (npcKindId !== null) {
+          // No-op on missing/non-adjacent — `findAdjacentNpcIndex`
+          // returns -1 in those cases. The mere existence of the call
+          // documents the contract; we do not branch on the result.
+          findAdjacentNpcIndex(state.floorState.npcs, player, npcKindId);
+        }
+      }
+      break;
+    }
+    case ACTION_TYPE_BUY: {
+      // Phase 7.A.2: purchase one unit of `action.item` from the NPC
+      // at `action.target` (kind ordinal). Validates: NPC exists, NPC
+      // is adjacent, NPC's stock contains the requested item, player
+      // has enough cred-chips. No-op on any failure — the state-hash
+      // chain still advances (advance was called above) so replays
+      // remain byte-identical.
+      const targetOrd = action.target;
+      const itemId = action.item as
+        | import("../registries/items").ItemKindId
+        | undefined;
+      let nextNpcs: readonly FloorNpc[] = state.floorState.npcs;
+      if (targetOrd !== undefined && itemId !== undefined) {
+        const npcKindId = npcKindIdAtOrdinal(targetOrd);
+        if (npcKindId !== null) {
+          const idx = findAdjacentNpcIndex(nextNpcs, nextPlayer, npcKindId);
+          if (idx >= 0) {
+            const npc = nextNpcs[idx]!;
+            const stockCount = inventoryCount(npc.inventory, itemId);
+            if (stockCount >= 1) {
+              const npcKind = getNpcKind(npc.kind);
+              const price = shopBuyPrice(
+                npcKind.basePrice,
+                npcKind.priceVariance,
+                stateHashPre,
+                action,
+              );
+              const playerChips = credChipCount(nextPlayer.inventory);
+              if (playerChips >= price) {
+                // Transfer: NPC inventory -= itemId; player += itemId.
+                // Player chips -= price; NPC chips += price.
+                const newNpcInv = npcInventoryAdd(
+                  npcInventoryRemove(npc.inventory, itemId, 1),
+                  "item.cred-chip",
+                  price,
+                );
+                nextNpcs = npcsReplaceAt(nextNpcs, idx, {
+                  ...npc,
+                  inventory: newNpcInv,
+                });
+                let newPlayerInv = inventoryRemove(
+                  nextPlayer.inventory,
+                  "item.cred-chip",
+                  price,
+                );
+                newPlayerInv = inventoryAdd(newPlayerInv, itemId, 1);
+                nextPlayer = {
+                  ...nextPlayer,
+                  inventory: newPlayerInv,
+                };
+              }
+            }
+          }
+        }
+      }
+      // Carry the (possibly mutated) npcs through the FloorState write
+      // path below.
+      _shopNextNpcs = nextNpcs;
+      _shopNpcsTouched = true;
+      break;
+    }
+    case ACTION_TYPE_SELL: {
+      // Phase 7.A.2: sell one unit of `action.item` to the NPC at
+      // `action.target`. Validates: NPC exists, adjacent, player has
+      // the item. NPC pays out half the buy price (floor 1) in cred-
+      // chip currency. No-op on missing/invalid; state hash still
+      // advances unconditionally.
+      const targetOrd = action.target;
+      const itemId = action.item as
+        | import("../registries/items").ItemKindId
+        | undefined;
+      let nextNpcs: readonly FloorNpc[] = state.floorState.npcs;
+      if (targetOrd !== undefined && itemId !== undefined) {
+        const npcKindId = npcKindIdAtOrdinal(targetOrd);
+        if (npcKindId !== null) {
+          const idx = findAdjacentNpcIndex(nextNpcs, nextPlayer, npcKindId);
+          if (idx >= 0) {
+            const npc = nextNpcs[idx]!;
+            if (inventoryCount(nextPlayer.inventory, itemId) >= 1) {
+              const npcKind = getNpcKind(npc.kind);
+              const buyPrice = shopBuyPrice(
+                npcKind.basePrice,
+                npcKind.priceVariance,
+                stateHashPre,
+                action,
+              );
+              const sellPrice = shopSellPrice(buyPrice);
+              // Transfer: player inventory -= itemId; player += chips.
+              // NPC inventory += itemId; NPC -= chips iff NPC has them
+              // (floor 0 — NPC may go into "credit" without chips).
+              let newPlayerInv = inventoryRemove(
+                nextPlayer.inventory,
+                itemId,
+                1,
+              );
+              newPlayerInv = inventoryAdd(
+                newPlayerInv,
+                "item.cred-chip",
+                sellPrice,
+              );
+              let newNpcInv = npcInventoryAdd(npc.inventory, itemId, 1);
+              const npcChips = credChipCount(newNpcInv);
+              if (npcChips >= sellPrice) {
+                newNpcInv = npcInventoryRemove(
+                  newNpcInv,
+                  "item.cred-chip",
+                  sellPrice,
+                );
+              }
+              nextNpcs = npcsReplaceAt(nextNpcs, idx, {
+                ...npc,
+                inventory: newNpcInv,
+              });
+              nextPlayer = {
+                ...nextPlayer,
+                inventory: newPlayerInv,
+              };
+            }
+          }
+        }
+      }
+      _shopNextNpcs = nextNpcs;
+      _shopNpcsTouched = true;
+      break;
+    }
     default:
       // Unknown action type — no-op per the additive-vocabulary
       // contract (Phase 1 frozen contract; addendum decision 3). The
@@ -459,10 +782,7 @@ export function tick(state: RunState, action: Action): RunState {
     let sawBoss = false;
     for (let i = 0; i < nextMonsters.length; i++) {
       const m = nextMonsters[i]!;
-      // The boss kind id is the only one whose registered isBoss is true.
-      // Detect via the kind id literal — the boss registry entry is
-      // named `monster.boss.black-ice-v0` (decision 12).
-      if (m.kind === "monster.boss.black-ice-v0") {
+      if (isBossKind(m.kind)) {
         sawBoss = true;
         if (m.hp === 0) bossDead = true;
       }
@@ -503,13 +823,25 @@ export function tick(state: RunState, action: Action): RunState {
         floor,
       );
 
+      // Phase 7.A.2: the boss carries a `boss-phase-N` aiState
+      // pinned by the player-attack-handler FSM. The legacy
+      // `decideMonsterAction` (Phase 3 contract) returns
+      // `newAiState: "idle" | "chasing"` from its idle/chasing FSM.
+      // For the boss, we keep its current `boss-phase-*` state on the
+      // move/stay paths (only the player-attack handler advances the
+      // boss FSM); for non-boss monsters we apply the AI's decision.
+      const isBoss = isBossKind(cur.kind);
+      const newAiStateForMonster: MonsterAIState = isBoss
+        ? cur.aiState
+        : (decision.newAiState as MonsterAIState);
+
       if (decision.kind === "stay") {
-        if (cur.aiState !== decision.newAiState) {
+        if (cur.aiState !== newAiStateForMonster) {
           workingMonsters = workingMonsters.map((x) =>
             x.id === m.id
               ? {
                   ...x,
-                  aiState: decision.newAiState as MonsterAIState,
+                  aiState: newAiStateForMonster,
                 }
               : x,
           );
@@ -529,7 +861,7 @@ export function tick(state: RunState, action: Action): RunState {
               ? {
                   ...x,
                   pos: decision.to as Point,
-                  aiState: decision.newAiState as MonsterAIState,
+                  aiState: newAiStateForMonster,
                 }
               : x,
           );
@@ -539,7 +871,7 @@ export function tick(state: RunState, action: Action): RunState {
             x.id === m.id
               ? {
                   ...x,
-                  aiState: decision.newAiState as MonsterAIState,
+                  aiState: newAiStateForMonster,
                 }
               : x,
           );
@@ -558,6 +890,11 @@ export function tick(state: RunState, action: Action): RunState {
         // `atk - def` shrinks). The roll uses
         // `item:effect:def-bonus` at the same index as the
         // counter-bonus roll for this monster.
+        // Per-domain index discipline — each rollU32 call within a
+        // tick uses a UNIQUE (domain, index) tuple. Counter-bonus
+        // and item-def-bonus share the same `counterIndex` because
+        // they live in DIFFERENT domains; the (domain, index) pair
+        // is unique per call (Phase 6.A.2 N5 carry-forward).
         const cyber = equippedCyberwareKind(workingPlayer.equipment);
         let defBonus = 0;
         if (cyber !== null && cyber.effect.kind === "def-bonus") {
@@ -570,9 +907,19 @@ export function tick(state: RunState, action: Action): RunState {
           );
         }
         counterIndex++;
+        // Phase 7.A.2 boss FSM scaling — when this monster is the
+        // floor-10 boss, add the per-phase atk/def increments.
+        // Phase 1 = +0/+0, phase 2 = +1/+0, phase 3 = +2/+1.
+        let bossAtkBonus = 0;
+        let bossDefBonus = 0;
+        if (isBossKind(cur.kind)) {
+          const scaling = bossPhaseScaling(cur.aiState);
+          bossAtkBonus = scaling.atkBonus;
+          bossDefBonus = scaling.defBonus;
+        }
         const dmg = damageAmount(
-          cur.atk,
-          workingPlayer.def + defBonus,
+          cur.atk + bossAtkBonus,
+          workingPlayer.def + defBonus + bossDefBonus,
           bonus,
         );
         const newHp = clampHp(workingPlayer.hp, dmg);
@@ -580,7 +927,11 @@ export function tick(state: RunState, action: Action): RunState {
           ...workingPlayer,
           hp: newHp,
         };
-        if (cur.aiState !== "chasing") {
+        // Phase 7.A.2: the boss does NOT transition aiState through
+        // the legacy idle/chasing path; it stays in its boss-phase-N
+        // state set by the player-attack handler. Non-boss monsters
+        // follow the existing chasing transition.
+        if (cur.aiState !== "chasing" && !isBossKind(cur.kind)) {
           workingMonsters = workingMonsters.map((x) =>
             x.id === m.id ? { ...x, aiState: "chasing" } : x,
           );
@@ -606,6 +957,10 @@ export function tick(state: RunState, action: Action): RunState {
           floor: state.floorState.floor,
           monsters: nextMonsters,
           items: nextFloorItems,
+          // Phase 7.A.2 — forward the (possibly mutated) NPC list. The
+          // shop handlers stage their writes through `_shopNextNpcs`;
+          // every other path forwards the input unchanged.
+          npcs: _shopNpcsTouched ? _shopNextNpcs : state.floorState.npcs,
         },
     player: nextPlayer,
     outcome,

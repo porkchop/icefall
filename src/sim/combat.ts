@@ -112,6 +112,27 @@ export const ROLL_DOMAIN_ITEM_ATK_BONUS = "item:effect:atk-bonus" as const;
 export const ROLL_DOMAIN_ITEM_DEF_BONUS = "item:effect:def-bonus" as const;
 
 /**
+ * Phase 7.A.2 frozen shop-domain set (`docs/ARCHITECTURE.md`
+ * "Phase 7 frozen contracts (NPCs + shops + boss)" → "Deterministic
+ * shop-transaction resolution"). 7-bit ASCII, length 1..31 bytes —
+ * same `rollBytes` contract as Phase 3 / Phase 6 domains.
+ *
+ *   - `shop:stock` — rolled at floor-spawn time (NOT per-action) over
+ *     the `streams.npcStock(floorN)` cursor; selects which items from
+ *     the NPC's `stockTable` end up in its inventory. Keeps the
+ *     per-tick `__consumed` empty invariant intact (Phase 3 frozen
+ *     contract item 9).
+ *   - `shop:price` — rolled per-action via `rollU32(stateHashPre,
+ *     action, "shop:price", 0) % variance` to compute the price the
+ *     NPC quotes for the chosen item.
+ *
+ * No `Math.random`, no floats — same discipline as every other
+ * deterministic-rolls domain.
+ */
+export const ROLL_DOMAIN_SHOP_STOCK = "shop:stock" as const;
+export const ROLL_DOMAIN_SHOP_PRICE = "shop:price" as const;
+
+/**
  * Compute the bonus for a damage roll. Low 2 bits of the u32 — uniform
  * over [0..3]. Frozen-contract item 4.
  */
