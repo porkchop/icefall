@@ -37,8 +37,14 @@ import type { Action } from "./core/encode";
 // `releases/index.json` is unreachable (pre-8.A.3 deploy).
 import { verify, type VerifyResult } from "./verifier/verify";
 import { listSlots, type SaveSlot } from "./save/storage";
-import { decideRouting, type RoutingDecision } from "./router/redirect";
+import {
+  buildReleasesIndexUrl,
+  decideRouting,
+  type RoutingDecision,
+} from "./router/redirect";
+import { formatShareUrl } from "./router/url-parse";
 import { decodeActionLog } from "./share/decode";
+import { fingerprintFull } from "./core/fingerprint";
 import type { FingerprintInputs } from "./core/fingerprint";
 
 declare global {
@@ -82,6 +88,16 @@ declare global {
     __REPLAY_MODE__: "active" | "idle" | undefined;
     __REPLAY_FINAL_STATE_HASH__: string | undefined;
     __REPLAY_OUTCOME__: "running" | "dead" | "won" | undefined;
+    // Phase 8.A.3 — share-URL + auto-redirect + canonicalization flags
+    // (memo addendum B9). Exposed for the cross-runtime Playwright suite
+    // on the live deploy.
+    __SHARE_URL__: string | undefined;
+    __ROUTER_AUTO_DECISION_KIND__:
+      | RoutingDecision["kind"]
+      | "no-run-param"
+      | "skipped"
+      | undefined;
+    __URL_CANONICALIZED__: "true" | "false" | undefined;
   }
 }
 
@@ -635,6 +651,102 @@ function renderDiagnostic(host: HTMLElement): void {
 
   root.appendChild(verifySection);
 
+  // Phase 8.A.3 — Share This Run section (memo decision 11 +
+  // advisory A3 + addendum B9). Mints a shareable URL from the
+  // user-supplied seed/mods; copies via navigator.clipboard.
+  // Exposes window.__SHARE_URL__ for the cross-runtime e2e suite.
+  const shareSection = el("section", "share-this-run");
+  shareSection.id = "share-this-run";
+  shareSection.appendChild(el("h2", undefined, "Share this run"));
+
+  // Per advisory A3: the button text differs by deploy context.
+  const baseUrl = import.meta.env.BASE_URL;
+  const isPinnedRelease = /\/releases\/[0-9a-f]{12}\/$/.test(baseUrl);
+  const shareLabel = isPinnedRelease
+    ? `Mint share URL (pinned to commit ${baseUrl.slice(-13, -1)})`
+    : "Mint share URL (pinned to current build)";
+  shareSection.appendChild(
+    el(
+      "p",
+      "share-help",
+      `Phase 8 share: enter a seed (and optional mods, comma-separated), and the diagnostic page will compute the fingerprint under the current build's commitHash + rulesetVersion + mint a canonical share URL via formatShareUrl. The clipboard write is best-effort (some browsers gate clipboard on user gesture).`,
+    ),
+  );
+
+  const shareSeedRow = el("label", "share-input-row", "seed");
+  const shareSeedInput = document.createElement("input");
+  shareSeedInput.type = "text";
+  shareSeedInput.id = "share-seed-input";
+  shareSeedInput.placeholder = "alpha-1";
+  shareSeedRow.appendChild(shareSeedInput);
+  shareSection.appendChild(shareSeedRow);
+
+  const shareModsRow = el("label", "share-input-row", "mods (comma-separated, optional)");
+  const shareModsInput = document.createElement("input");
+  shareModsInput.type = "text";
+  shareModsInput.id = "share-mods-input";
+  shareModsInput.placeholder = "(empty)";
+  shareModsRow.appendChild(shareModsInput);
+  shareSection.appendChild(shareModsRow);
+
+  const shareButton = document.createElement("button");
+  shareButton.type = "button";
+  shareButton.id = "share-mint";
+  shareButton.textContent = shareLabel;
+  shareSection.appendChild(shareButton);
+
+  const shareOutput = el("pre", "share-output");
+  shareOutput.id = "share-output";
+  shareSection.appendChild(shareOutput);
+
+  function runShare(): void {
+    const seed = shareSeedInput.value;
+    const modIdsRaw = shareModsInput.value
+      .split(",")
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+    const inputs: FingerprintInputs = {
+      commitHash,
+      rulesetVersion,
+      seed,
+      modIds: modIdsRaw,
+    };
+    let fpFull: string;
+    try {
+      fpFull = fingerprintFull(inputs);
+    } catch (e) {
+      shareOutput.textContent = `error: ${(e as Error).message}`;
+      return;
+    }
+    const fpShort = fpFull.slice(0, 22);
+    const url = formatShareUrl(
+      inputs,
+      fpShort,
+      null, // no #log= in 8.A.3 (Phase 9 polish adds the in-game log capture)
+      window.location.origin + baseUrl,
+    );
+    shareOutput.textContent = url;
+    window.__SHARE_URL__ = url;
+    // Best-effort clipboard write. Per advisory A3, this requires
+    // a user gesture in some browsers; the click handler IS the gesture
+    // so navigator.clipboard.writeText should succeed in chromium /
+    // firefox / webkit (released after 2022).
+    if (
+      typeof navigator !== "undefined" &&
+      navigator.clipboard &&
+      typeof navigator.clipboard.writeText === "function"
+    ) {
+      navigator.clipboard.writeText(url).catch(() => {
+        // Silent fallback — the URL is still visible in the <pre>.
+      });
+    }
+  }
+  shareButton.addEventListener("click", () => {
+    runShare();
+  });
+
+  root.appendChild(shareSection);
+
   // Phase 8.A.2b — Save Slots section (memo decision 15 + addendum
   // B6). Lists every `icefall:save:v1:*` localStorage key and surfaces
   // stale-release slots (different commitHash, same seed) with a
@@ -960,10 +1072,140 @@ function decodeAtlasImage(png: Uint8Array): Promise<HTMLImageElement> {
 /* ------------------------------------------------------------------ */
 /* Bootstrap.                                                         */
 /* ------------------------------------------------------------------ */
+/**
+ * Phase 8.A.3 page-load routing entry point. Per
+ * `artifacts/decision-memo-phase-8.md` decision 5 + addendum B5 + B9.
+ *
+ * Behavior on page load:
+ *   1. If URL has no `?run=`, no routing happens (boot fresh).
+ *   2. If URL has `?run=` matching the current build's fingerprint,
+ *      run `history.replaceState` with the canonical share form
+ *      (sorted mods, normalized encoding) so the URL bar matches
+ *      the `formatShareUrl` output.
+ *   3. If URL has `?run=` NOT matching the current build, fetch
+ *      `releases/index.json` (with a 5s timeout + graceful fallback
+ *      on 404), enumerate via `decideRouting`, and either:
+ *        - Redirect via `window.location.replace(...)` to the
+ *          matching `releases/<commit>/...`
+ *        - Surface an error in the diagnostic page (via window flags)
+ *
+ * Returns `true` when a redirect is in flight (callers should NOT
+ * proceed with rendering); `false` when the page should continue
+ * to render normally.
+ */
+async function applyRouting(): Promise<boolean> {
+  // Default flags for the cross-runtime e2e surface.
+  window.__ROUTER_AUTO_DECISION_KIND__ = "skipped";
+  window.__URL_CANONICALIZED__ = "false";
+
+  const href = window.location.href;
+  // Quick parse-and-classify without fetching the index. If there's
+  // no `?run=`, exit early.
+  const probeDecision = decideRouting(
+    href,
+    {
+      commitHash,
+      rulesetVersion,
+      basePath: import.meta.env.BASE_URL,
+    },
+    null, // no index yet — see below for the fetch path
+  );
+
+  if (probeDecision.kind === "boot-fresh") {
+    window.__ROUTER_AUTO_DECISION_KIND__ = "no-run-param";
+    return false;
+  }
+  if (probeDecision.kind === "boot-replay") {
+    // Fingerprint matches the current build. Canonicalize the URL
+    // bar to the formatShareUrl output (sorted mods, normalized
+    // encoding) for share-form consistency.
+    //
+    // Pass the FULL `href` (not `origin + pathname`) so any extra
+    // query params the page recognizes — most importantly
+    // `?mode=replay` which the diagnostic page's "Replay this run"
+    // section reads later — are preserved through canonicalization.
+    // formatShareUrl sets `?run=`, `?seed=`, `?mods=` on top of the
+    // existing URL, leaving other params intact (per the WHATWG
+    // `URLSearchParams.set` semantics).
+    window.__ROUTER_AUTO_DECISION_KIND__ = "boot-replay";
+    const canonical = formatShareUrl(
+      probeDecision.inputs,
+      probeDecision.claimedFingerprint,
+      probeDecision.logWire,
+      href,
+    );
+    if (canonical !== href) {
+      try {
+        window.history.replaceState(null, "", canonical);
+        window.__URL_CANONICALIZED__ = "true";
+      } catch {
+        // History API may be locked down (sandboxed iframe etc.) —
+        // ignore silently; the URL just won't canonicalize.
+      }
+    }
+    return false;
+  }
+  if (probeDecision.kind === "error") {
+    // URL parse / log decode error — surface in the diagnostic
+    // page; don't try to redirect.
+    window.__ROUTER_AUTO_DECISION_KIND__ = "error";
+    return false;
+  }
+  // probeDecision.kind === "redirect" or "error" with index needed.
+  // The probe didn't have the index yet; fetch and re-decide.
+
+  let indexJson: string | null = null;
+  try {
+    const indexUrl = buildReleasesIndexUrl(
+      window.location.origin,
+      import.meta.env.BASE_URL,
+    );
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    const res = await fetch(indexUrl, { signal: controller.signal });
+    clearTimeout(timeout);
+    if (res.ok) {
+      indexJson = await res.text();
+    }
+  } catch {
+    // Fetch failed (404, timeout, network error). Fall through to
+    // null-index path.
+  }
+
+  const finalDecision = decideRouting(
+    href,
+    {
+      commitHash,
+      rulesetVersion,
+      basePath: import.meta.env.BASE_URL,
+    },
+    indexJson,
+  );
+  window.__ROUTER_AUTO_DECISION_KIND__ = finalDecision.kind;
+
+  if (finalDecision.kind === "redirect") {
+    try {
+      window.location.replace(finalDecision.target);
+      return true;
+    } catch {
+      // window.location.replace may throw in sandboxed contexts;
+      // fall through to render the diagnostic page so the user can
+      // see the routing-error UI.
+      return false;
+    }
+  }
+  return false;
+}
+
 async function bootstrap(): Promise<void> {
   const root = document.getElementById("app");
   if (!root) return;
   root.innerHTML = "";
+
+  // Phase 8.A.3 — apply routing first. If a redirect is in flight,
+  // skip rendering (the page is about to navigate away).
+  const redirecting = await applyRouting();
+  if (redirecting) return;
 
   const header = el("header", "header");
   header.appendChild(el("h1", "title", "ICEFALL"));

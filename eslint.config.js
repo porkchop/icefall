@@ -46,7 +46,10 @@ const SIM_UNORDERED = [
 ];
 
 export default tseslint.config(
-  { ignores: ["dist", "coverage", "node_modules", "playwright-report", "test-results"] },
+  // Phase 8.A.3 — `dist-build-*/` (intermediate per-base vite outputs)
+  // and `dist-final/` (the merged latest/ + releases/<commit>/ tree)
+  // contain minified production JS that lints would otherwise scan.
+  { ignores: ["dist", "dist-build-*", "dist-final", "coverage", "node_modules", "playwright-report", "test-results"] },
   ...tseslint.configs.recommended,
   {
     files: ["src/**/*.ts"],

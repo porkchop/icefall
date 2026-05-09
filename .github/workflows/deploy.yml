@@ -32,30 +32,51 @@ jobs:
         run: npm run typecheck
       - name: unit tests + coverage gate
         run: npm test
-      - name: build
-        run: npm run build
+      - name: dual-build (Phase 8.A.3 — latest/ + releases/<commit-12>/)
+        run: |
+          set -e
+          commit_short=$(git rev-parse --short=12 HEAD)
+          echo "commit_short=${commit_short}"
+          node scripts/build-dual.mjs --commit-short=${commit_short} --dist-final=dist-final
       - name: bundle size budget (≤ 110 KB gzipped, Phase 8 memo decision 16)
         run: |
           set -e
-          gzip_size=$(find dist/assets -name '*.js' -exec gzip -c {} \; | wc -c)
+          # Phase 8.A.3: dist-final/assets/ holds the latest/ JS + CSS;
+          # the per-release subtree is byte-identical so we measure once.
+          gzip_size=$(find dist-final/assets -name '*.js' -exec gzip -c {} \; | wc -c)
           echo "JS gzipped bundle size: ${gzip_size} bytes"
           # Phase 8.A.2b bumps the budget from 75 KB to 110 KB to
           # accommodate fflate (~30 KB) + the Phase 8 router + verifier
-          # + share + save layers (~15 KB combined). Phase 8.A.2b actual
-          # is ~40 KB gzipped; the headroom carries Phase 9 polish.
+          # + share + save layers (~15 KB combined). Phase 8.A.3 actual
+          # is ~45 KB gzipped; the headroom carries Phase 9 polish.
           if [ "$gzip_size" -gt 112640 ]; then
             echo "::error::Bundle size ${gzip_size} bytes exceeds 110 KB budget"
             exit 1
           fi
+      - name: publish-dual (Phase 8.A.3 — fetch prior index, merge, write)
+        run: |
+          set -e
+          commit_short=$(git rev-parse --short=12 HEAD)
+          published_at=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+          # The router fetches releases/index.json from
+          # ${origin}${BASE_LATEST_PATH}releases/index.json (memo addendum
+          # B5). The canonical pre-deploy index URL on GitHub Pages is:
+          prior_index_url="https://porkchop.github.io/icefall/releases/index.json"
+          node scripts/publish-dual.mjs \
+            --commit-short=${commit_short} \
+            --published-at=${published_at} \
+            --dist-final=dist-final \
+            --prior-index-url=${prior_index_url}
       - name: upload bundle report (memo addendum N5)
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: bundle-report
           path: |
-            dist/**/*.js
-            dist/**/*.css
-            dist/index.html
+            dist-final/**/*.js
+            dist-final/**/*.css
+            dist-final/index.html
+            dist-final/releases/index.json
           if-no-files-found: warn
           retention-days: 30
       - name: install playwright browsers
@@ -68,10 +89,10 @@ jobs:
           # Self-bootstrap Pages on first run so the host doesn't need to
           # toggle "Source: GitHub Actions" in repo Settings → Pages manually.
           enablement: true
-      - name: upload pages artifact
+      - name: upload pages artifact (Phase 8.A.3 — dist-final has latest/ + releases/<commit>/)
         uses: actions/upload-pages-artifact@v3
         with:
-          path: dist
+          path: dist-final
 
   # Phase 4.B cross-OS PNG byte-equality matrix (memo addendum N14).
   # Each runner regenerates assets/atlas.png and uploads it; the

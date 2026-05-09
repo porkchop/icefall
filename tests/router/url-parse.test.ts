@@ -207,4 +207,26 @@ describe("formatShareUrl (round-trip with parseShareUrl)", () => {
     const u = new URL(url);
     expect(u.searchParams.get("mods")).toBe("aaa,mmm,zzz");
   });
+
+  // Phase 8.A.3 regression test (code-review-phase-8-A-3.md B2). The
+  // applyRouting canonicalization step calls formatShareUrl with the
+  // FULL existing href (not origin + pathname). Unrecognized query
+  // params — most importantly `?mode=replay` which the Replay-this-run
+  // section reads later — must be preserved through the round-trip.
+  it("preserves unrecognized query params (e.g. ?mode=replay) when canonicalizing", () => {
+    const inputs: FingerprintInputs = {
+      commitHash: "deadbeef0000",
+      rulesetVersion: "x".repeat(64),
+      seed: "s",
+      modIds: [],
+    };
+    const fp = "A".repeat(22);
+    const inputUrl = `${BASE}?run=${fp}&seed=s&mode=replay`;
+    const canonical = formatShareUrl(inputs, fp, null, inputUrl);
+    const u = new URL(canonical);
+    expect(u.searchParams.get("run")).toBe(fp);
+    expect(u.searchParams.get("seed")).toBe("s");
+    // The critical assertion: ?mode=replay survives canonicalization.
+    expect(u.searchParams.get("mode")).toBe("replay");
+  });
 });

@@ -6,6 +6,9 @@
 # Project-language gitignores
 node_modules/
 dist/
+# Phase 8.A.3 — dual-build intermediate + final output trees
+dist-build-*/
+dist-final/
 coverage/
 playwright-report/
 test-results/
