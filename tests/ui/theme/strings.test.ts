@@ -192,4 +192,12 @@ describe("getString — call-site contract for each consumer module", () => {
     expect(getString("winScreen.wonMessage")).toBeTruthy();
     expect(getString("winScreen.notWonMessage")).toBeTruthy();
   });
+
+  it("CRT shader toggle keys (Phase 9.A.4 — docs/PHASES.md:580 deliverable)", () => {
+    // Pinned byte-exact since the toggle button label is user-facing
+    // and a future translator/locale overlay should know the canonical
+    // English form.
+    expect(getString("crtShader.toggleOn")).toBe("CRT scanlines: on");
+    expect(getString("crtShader.toggleOff")).toBe("CRT scanlines: off");
+  });
 });

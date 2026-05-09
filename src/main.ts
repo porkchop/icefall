@@ -28,6 +28,7 @@ import { renderInventory } from "./ui/inventory";
 import { renderEquipment } from "./ui/equipment";
 import { renderWinScreen } from "./ui/win-screen";
 import { renderTitleScreen } from "./ui/title-screen";
+import { getString } from "./ui/theme/strings";
 import type { RunState } from "./sim/types";
 import type { Action } from "./core/encode";
 // Phase 8.A.2b — verifier + save layer + URL router (memo decision
@@ -105,6 +106,13 @@ declare global {
     // the page boots straight into the playable game (preserves the
     // deep-link UX from Phase 5 and the share-URL flow from Phase 8).
     __TITLE_SCREEN__: "active" | "skipped" | undefined;
+    // Phase 9.A.4 — CRT/scanline post-processing shader toggle (per
+    // docs/PHASES.md:580). Default "off"; user clicks the toggle
+    // button to flip on. The shader is a CSS-overlay-only filter
+    // (no WebGL, no animation) so determinism / accessibility are
+    // unaffected when off — and the static scanline pattern is
+    // compatible with prefers-reduced-motion when on.
+    __CRT_SHADER__: "on" | "off" | undefined;
   }
 }
 
@@ -926,6 +934,15 @@ async function startGame(host: HTMLElement): Promise<void> {
   hudHost.id = "game-hud";
   section.appendChild(hudHost);
 
+  // Phase 9.A.4 — CRT shader overlay (toggleable). The canvas is
+  // wrapped so an absolute-positioned overlay can sit on top
+  // without affecting the canvas's pixel-perfect dimensions. The
+  // overlay is HIDDEN by default (display: none); clicking the
+  // toggle button below adds the `.crt-shader-on` class to the
+  // wrap, revealing the static scanline pattern.
+  const canvasWrap = el("div", "game-canvas-wrap");
+  canvasWrap.id = "game-canvas-wrap";
+
   const canvas = document.createElement("canvas");
   canvas.id = "game-canvas";
   canvas.className = "game-canvas";
@@ -933,7 +950,32 @@ async function startGame(host: HTMLElement): Promise<void> {
   // window-level keyboard listener catches everything anyway, but this
   // gives a visible focus ring for accessibility-by-default.
   canvas.tabIndex = 0;
-  section.appendChild(canvas);
+  canvasWrap.appendChild(canvas);
+
+  const crtOverlay = el("div", "crt-shader-overlay");
+  crtOverlay.id = "crt-shader-overlay";
+  canvasWrap.appendChild(crtOverlay);
+
+  section.appendChild(canvasWrap);
+
+  // CRT shader toggle button. Default state is "off" so the bundled
+  // determinism / Phase 5 frozen contract surfaces are unaffected
+  // unless the user opts in. The toggle's label routes through the
+  // theme registry so a future locale overlay can replace it.
+  window.__CRT_SHADER__ = "off";
+  const crtToggle = document.createElement("button");
+  crtToggle.type = "button";
+  crtToggle.id = "crt-shader-toggle";
+  crtToggle.className = "crt-shader-toggle";
+  crtToggle.textContent = getString("crtShader.toggleOff");
+  crtToggle.addEventListener("click", () => {
+    const isOn = canvasWrap.classList.toggle("crt-shader-on");
+    window.__CRT_SHADER__ = isOn ? "on" : "off";
+    crtToggle.textContent = getString(
+      isOn ? "crtShader.toggleOn" : "crtShader.toggleOff",
+    );
+  });
+  section.appendChild(crtToggle);
 
   // Phase 6.A.2 — inventory + equipment panels.
   const inventoryHost = el("section", "game-inventory");

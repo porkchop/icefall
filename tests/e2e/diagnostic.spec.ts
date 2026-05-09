@@ -805,3 +805,81 @@ test("Phase 9 title screen still shows on empty ?seed= (code-review S2 fix)", as
   await expect(page.locator("#title-screen")).toBeVisible();
 });
 
+// ----------------------------------------------------------------------
+// Phase 9.A.4 — CRT shader toggle tests.
+//
+// The shader is rendered as a CSS-overlay div (`.crt-shader-overlay`)
+// inside `.game-canvas-wrap`, hidden by default. A toggle button below
+// the canvas flips the `.crt-shader-on` class on the wrap and updates
+// the `__CRT_SHADER__` window flag.
+// ----------------------------------------------------------------------
+
+test("Phase 9 CRT shader toggle is visible + defaults to 'off'", async ({
+  page,
+}) => {
+  await page.goto("/?seed=diagnostic-sample");
+  await page.waitForFunction(
+    () => window.__GAME_READY__ === "ready",
+    null,
+    { timeout: 10_000 },
+  );
+  await expect(page.locator("#crt-shader-toggle")).toBeVisible();
+  await expect(page.locator("#crt-shader-toggle")).toContainText(
+    "CRT scanlines: off",
+  );
+  expect(await page.evaluate(() => window.__CRT_SHADER__)).toBe("off");
+});
+
+test("Phase 9 CRT shader toggle click flips the class + window flag + label", async ({
+  page,
+}) => {
+  await page.goto("/?seed=diagnostic-sample");
+  await page.waitForFunction(
+    () => window.__GAME_READY__ === "ready",
+    null,
+    { timeout: 10_000 },
+  );
+  // Initially off: no `.crt-shader-on` class on the wrap.
+  await expect(page.locator("#game-canvas-wrap")).not.toHaveClass(
+    /crt-shader-on/,
+  );
+
+  // Click → on: class added + flag updated + label flipped.
+  await page.locator("#crt-shader-toggle").click();
+  await expect(page.locator("#game-canvas-wrap")).toHaveClass(
+    /crt-shader-on/,
+  );
+  expect(await page.evaluate(() => window.__CRT_SHADER__)).toBe("on");
+  await expect(page.locator("#crt-shader-toggle")).toContainText(
+    "CRT scanlines: on",
+  );
+
+  // Click again → off: class removed + flag reset + label restored.
+  await page.locator("#crt-shader-toggle").click();
+  await expect(page.locator("#game-canvas-wrap")).not.toHaveClass(
+    /crt-shader-on/,
+  );
+  expect(await page.evaluate(() => window.__CRT_SHADER__)).toBe("off");
+  await expect(page.locator("#crt-shader-toggle")).toContainText(
+    "CRT scanlines: off",
+  );
+});
+
+test("Phase 9 CRT shader overlay sits inside the canvas wrap", async ({
+  page,
+}) => {
+  await page.goto("/?seed=diagnostic-sample");
+  await page.waitForFunction(
+    () => window.__GAME_READY__ === "ready",
+    null,
+    { timeout: 10_000 },
+  );
+  // The overlay is a sibling of the canvas inside .game-canvas-wrap;
+  // assert the structure so a future refactor that breaks the
+  // positioning context surfaces immediately.
+  await expect(page.locator("#game-canvas-wrap #game-canvas")).toHaveCount(1);
+  await expect(
+    page.locator("#game-canvas-wrap #crt-shader-overlay"),
+  ).toHaveCount(1);
+});
+

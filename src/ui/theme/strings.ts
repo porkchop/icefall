@@ -73,6 +73,13 @@ const DEFAULT_THEME = {
   "winScreen.wonMessage":
     "You defeated the floor-10 boss. The shareable fingerprint below proves your run.",
   "winScreen.notWonMessage": "Run not yet complete.",
+
+  // CRT shader toggle (Phase 9.A.4 — docs/PHASES.md:580 deliverable).
+  // The toggle button label flips between these two states; default is
+  // "off" so the determinism / accessibility / Phase 5 frozen contract
+  // surfaces are unaffected by default.
+  "crtShader.toggleOn": "CRT scanlines: on",
+  "crtShader.toggleOff": "CRT scanlines: off",
 } as const;
 
 /**
