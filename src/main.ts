@@ -950,6 +950,11 @@ async function startGame(host: HTMLElement): Promise<void> {
   // window-level keyboard listener catches everything anyway, but this
   // gives a visible focus ring for accessibility-by-default.
   canvas.tabIndex = 0;
+  // Phase 9.A.8 a11y audit: a screen-reader user can't see the canvas;
+  // the aria-label surfaces the keyboard contract so they know what
+  // keys do what without consulting docs.
+  canvas.setAttribute("role", "application");
+  canvas.setAttribute("aria-label", getString("a11y.canvasLabel"));
   canvasWrap.appendChild(canvas);
 
   const crtOverlay = el("div", "crt-shader-overlay");
@@ -962,18 +967,24 @@ async function startGame(host: HTMLElement): Promise<void> {
   // determinism / Phase 5 frozen contract surfaces are unaffected
   // unless the user opts in. The toggle's label routes through the
   // theme registry so a future locale overlay can replace it.
+  //
+  // Phase 9.A.8 a11y audit: aria-pressed='true|false' surfaces the
+  // toggle state to screen-reader users (without it, the button
+  // sounds the same regardless of state to assistive tech).
   window.__CRT_SHADER__ = "off";
   const crtToggle = document.createElement("button");
   crtToggle.type = "button";
   crtToggle.id = "crt-shader-toggle";
   crtToggle.className = "crt-shader-toggle";
   crtToggle.textContent = getString("crtShader.toggleOff");
+  crtToggle.setAttribute("aria-pressed", "false");
   crtToggle.addEventListener("click", () => {
     const isOn = canvasWrap.classList.toggle("crt-shader-on");
     window.__CRT_SHADER__ = isOn ? "on" : "off";
     crtToggle.textContent = getString(
       isOn ? "crtShader.toggleOn" : "crtShader.toggleOff",
     );
+    crtToggle.setAttribute("aria-pressed", isOn ? "true" : "false");
   });
   section.appendChild(crtToggle);
 

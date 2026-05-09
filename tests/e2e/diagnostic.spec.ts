@@ -883,3 +883,59 @@ test("Phase 9 CRT shader overlay sits inside the canvas wrap", async ({
   ).toHaveCount(1);
 });
 
+// ----------------------------------------------------------------------
+// Phase 9.A.8 — formal accessibility audit tests.
+//
+// Verifies the ARIA semantics added in 9.A.8: canvas has a screen-
+// reader-friendly aria-label + role; CRT shader toggle has
+// aria-pressed reflecting its state. The keyboard-only Tab order
+// is implicitly verified by the existing title-screen + game tests
+// (every interactive element is a native input/button/canvas with
+// tabindex=0 — keyboard navigation works by default).
+// ----------------------------------------------------------------------
+
+test("Phase 9 game canvas has aria-label + role='application'", async ({
+  page,
+}) => {
+  await page.goto("/?seed=diagnostic-sample");
+  await page.waitForFunction(
+    () => window.__GAME_READY__ === "ready",
+    null,
+    { timeout: 10_000 },
+  );
+  const canvas = page.locator("#game-canvas");
+  await expect(canvas).toHaveAttribute("role", "application");
+  // The aria-label must mention the keyboard controls (the canvas is
+  // a graphical surface; keyboard IS the entire input contract).
+  const label = await canvas.getAttribute("aria-label");
+  expect(label).not.toBeNull();
+  expect(label!).toContain("ICEFALL");
+  expect(label!).toContain("arrow keys");
+  expect(label!).toContain("WASD");
+});
+
+test("Phase 9 CRT shader toggle aria-pressed reflects state", async ({
+  page,
+}) => {
+  await page.goto("/?seed=diagnostic-sample");
+  await page.waitForFunction(
+    () => window.__GAME_READY__ === "ready",
+    null,
+    { timeout: 10_000 },
+  );
+  const toggle = page.locator("#crt-shader-toggle");
+  // Initial state: aria-pressed='false' (matches the default-off
+  // window.__CRT_SHADER__ flag).
+  await expect(toggle).toHaveAttribute("aria-pressed", "false");
+
+  // Click to turn on; aria-pressed flips to 'true'.
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-pressed", "true");
+  expect(await page.evaluate(() => window.__CRT_SHADER__)).toBe("on");
+
+  // Click again to turn off; aria-pressed flips back to 'false'.
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-pressed", "false");
+  expect(await page.evaluate(() => window.__CRT_SHADER__)).toBe("off");
+});
+

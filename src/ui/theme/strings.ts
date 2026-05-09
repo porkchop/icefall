@@ -80,6 +80,14 @@ const DEFAULT_THEME = {
   // surfaces are unaffected by default.
   "crtShader.toggleOn": "CRT scanlines: on",
   "crtShader.toggleOff": "CRT scanlines: off",
+
+  // Accessibility (Phase 9.A.8 — docs/PHASES.md:586 deliverable).
+  // The game-canvas aria-label gives screen-reader users the keyboard
+  // controls for the playable game (the canvas itself is a graphical
+  // surface the renderer paints; the keys are the entire input
+  // contract).
+  "a11y.canvasLabel":
+    "ICEFALL game canvas. Keyboard controls: arrow keys or WASD to move (Q/E/Z/C for diagonals); space or period to wait; G to grab an item; shift+period on a stair tile to descend.",
 } as const;
 
 /**

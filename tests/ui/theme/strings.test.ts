@@ -200,4 +200,19 @@ describe("getString — call-site contract for each consumer module", () => {
     expect(getString("crtShader.toggleOn")).toBe("CRT scanlines: on");
     expect(getString("crtShader.toggleOff")).toBe("CRT scanlines: off");
   });
+
+  it("a11y canvas aria-label (Phase 9.A.8 — docs/PHASES.md:586 deliverable)", () => {
+    // The canvas aria-label surfaces the keyboard contract to
+    // screen-reader users; the contract IS load-bearing for the
+    // accessibility acceptance criterion. A future locale overlay
+    // should preserve the key bindings (arrow keys, WASD, space,
+    // period, G, shift+period) in the localized text.
+    const label = getString("a11y.canvasLabel");
+    expect(label).toContain("ICEFALL");
+    expect(label).toContain("arrow keys");
+    expect(label).toContain("WASD");
+    expect(label).toContain("space");
+    expect(label).toContain("G");
+    expect(label).toContain("shift+period");
+  });
 });

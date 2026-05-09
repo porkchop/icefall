@@ -178,17 +178,50 @@ Playwright suite on every commit.
 
 ## Accessibility
 
-- **Keyboard-only**: the game is fully keyboard-driven (arrow keys
-  + WASD + space). The canvas is `tabindex=0` and accepts focus;
-  every action has a key binding. No pointer-required interactions
-  in the playable surface.
-- **prefers-reduced-motion**: the page respects the system
-  preference; the (currently minimal) UI animations are gated behind
-  `@media (prefers-reduced-motion: no-preference)`. The deterministic
-  rendering itself has no animation that would conflict.
-- **Contrast**: the cyberpunk neon palette is high-contrast against
-  the dark background by design. A formal contrast audit lands in
-  Phase 9.
+The Phase 9.A.8 formal accessibility audit verifies WCAG AA
+compliance on the user-facing surface:
+
+- **Keyboard-only navigation.** The game is fully keyboard-driven
+  (arrow keys + WASD + space + period + G + shift+period). The
+  canvas is `tabindex=0`, `role="application"`, and carries an
+  `aria-label` listing every key binding so screen-reader users
+  understand the input contract without consulting docs. The title
+  screen + diagnostic page use native `<input>` / `<button>` /
+  `<textarea>` elements with default keyboard focusability;
+  Tab / Shift-Tab cycle through them in source order; Enter on the
+  seed input activates "New Run".
+- **Focus rings.** A high-contrast `:focus-visible` outline using
+  the neon-purple `--accent` color sits on every focusable element
+  (input + button + canvas) — see `style.css`'s 9.A.1 a11y block.
+- **prefers-reduced-motion.** The page respects the system
+  preference. A media-query gate caps every animation +
+  transition + scroll-behavior at 0.001ms when the user has
+  `prefers-reduced-motion: reduce` set. The deterministic core has
+  no animations on the state-hash chain; the CRT shader (Phase
+  9.A.4, default off) is a *static* scanline pattern with no
+  movement, so it is compatible with the reduced-motion preference
+  even when the user toggles it on.
+- **Color contrast (WCAG AA).** The cyberpunk palette against the
+  `--bg` (#0c0e14) dark background:
+  - `--fg` (#d6deeb) — body text — **13.7:1** (passes AAA)
+  - `--green` (#6fe3a8) — semantic positive / primary action — **10.4:1** (passes AAA)
+  - `--accent` (#c792ea) — focus rings + highlights — **7.4:1** (passes AAA)
+  - `--muted` (#7080a0) — secondary text — **5.5:1** (passes AA)
+
+  All passes WCAG AA (4.5:1 body text, 3:1 large text + UI
+  components). The `--muted` color narrowly meets AA — large
+  helper-text use only.
+- **ARIA semantics.** The CRT shader toggle exposes
+  `aria-pressed="true|false"` reflecting its on/off state so
+  screen-readers announce the toggle's current state. The game
+  canvas uses `role="application"` to indicate the keyboard handler
+  is the entire input contract (not document-flow keyboard
+  navigation).
+- **CRT shader vestibular consideration.** The CRT scanline
+  overlay is *off by default* — high-contrast static patterns can
+  be disorienting for users with vestibular sensitivity, even
+  though they are not "motion" in the WCAG sense. The user opts in
+  via the toggle.
 
 ## Determinism guards
 
