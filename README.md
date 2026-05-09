@@ -209,6 +209,12 @@ Any change to any of these digests requires either a fix to the
 regression that caused it or a deliberate `rulesetVersion` bump
 (an architecture-red-team review event).
 
+## Contributing
+
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the development setup,
+the deterministic-discipline contract, the phase-gated PR process,
+and the cross-runtime golden chain that every PR must preserve.
+
 ## License
 
 A LICENSE file lands in Phase 9 polish. Until then, all rights
