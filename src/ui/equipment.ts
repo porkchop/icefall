@@ -16,8 +16,7 @@
 
 import type { RunState } from "../sim/types";
 import { EQUIPMENT_SLOTS } from "../sim/types";
-
-const EMPTY_LABEL = "(empty)";
+import { getString } from "./theme/strings";
 
 /**
  * Idempotently render the equipment section into `host`. Each slot is
@@ -34,7 +33,7 @@ export function renderEquipment(host: HTMLElement, state: RunState): void {
     host.classList.add("equipment");
     const heading = document.createElement("h3");
     heading.className = "equipment-title";
-    heading.textContent = "Equipment";
+    heading.textContent = getString("equipment.heading");
     host.appendChild(heading);
     for (let i = 0; i < EQUIPMENT_SLOTS.length; i++) {
       const slot = EQUIPMENT_SLOTS[i]!;
@@ -60,7 +59,8 @@ export function renderEquipment(host: HTMLElement, state: RunState): void {
     );
     if (valueEl !== null) {
       const equipped = state.player.equipment[slot];
-      valueEl.textContent = equipped === null ? EMPTY_LABEL : equipped;
+      valueEl.textContent =
+        equipped === null ? getString("equipment.emptySlot") : equipped;
     }
   }
 }

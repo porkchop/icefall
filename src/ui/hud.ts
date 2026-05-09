@@ -20,6 +20,7 @@
 
 import type { RunState } from "../sim/types";
 import { fingerprint } from "../core/fingerprint";
+import { getString } from "./theme/strings";
 
 const HP_FIELD = "hp";
 const FLOOR_FIELD = "floor";
@@ -45,10 +46,10 @@ export function renderHud(host: HTMLElement, state: RunState): void {
   if (hpEl === null) {
     host.innerHTML = "";
     host.classList.add("hud");
-    hpEl = appendField(host, HP_FIELD, "HP");
-    appendField(host, FLOOR_FIELD, "FLOOR");
-    appendField(host, OUTCOME_FIELD, "OUTCOME");
-    appendField(host, FINGERPRINT_FIELD, "FP");
+    hpEl = appendField(host, HP_FIELD, getString("hud.hpLabel"));
+    appendField(host, FLOOR_FIELD, getString("hud.floorLabel"));
+    appendField(host, OUTCOME_FIELD, getString("hud.outcomeLabel"));
+    appendField(host, FINGERPRINT_FIELD, getString("hud.fingerprintLabel"));
   }
 
   const hp = `${state.player.hp}/${state.player.hpMax}`;

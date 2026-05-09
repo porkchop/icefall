@@ -18,6 +18,7 @@
  */
 
 import type { RunState } from "../sim/types";
+import { getString } from "./theme/strings";
 
 const INVENTORY_LIST = "inventory-list";
 const INVENTORY_COUNT = "inventory-count";
@@ -40,7 +41,7 @@ export function renderInventory(host: HTMLElement, state: RunState): void {
     host.classList.add("inventory");
     const heading = document.createElement("h3");
     heading.className = "inventory-title";
-    heading.textContent = "Inventory";
+    heading.textContent = getString("inventory.heading");
     host.appendChild(heading);
     countEl = document.createElement("div");
     countEl.className = "inventory-count";
@@ -57,9 +58,20 @@ export function renderInventory(host: HTMLElement, state: RunState): void {
   // positive integer count; total items = sum of counts).
   let totalCount = 0;
   for (let i = 0; i < inv.length; i++) totalCount += inv[i]!.count;
-  countEl.textContent = `${inv.length} stack${
-    inv.length === 1 ? "" : "s"
-  } · ${totalCount} item${totalCount === 1 ? "" : "s"}`;
+  const stackNoun =
+    inv.length === 1
+      ? getString("inventory.stackNounSingular")
+      : getString("inventory.stackNounPlural");
+  const itemNoun =
+    totalCount === 1
+      ? getString("inventory.itemNounSingular")
+      : getString("inventory.itemNounPlural");
+  countEl.textContent = getString("inventory.countTemplate", {
+    stackCount: inv.length,
+    stackNoun,
+    itemCount: totalCount,
+    itemNoun,
+  });
 
   // Repopulate the list. Setting innerHTML to "" is safe because every
   // child is owned by this module.

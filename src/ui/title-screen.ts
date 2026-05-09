@@ -32,7 +32,13 @@
  *   - Enter on a button activates the button
  *   - The :focus-visible CSS rule from 9.A.1 provides a high-contrast
  *     focus ring
+ *
+ * **Phase 9.A.3 theme registry.** Every user-facing text constant
+ * routes through `src/ui/theme/strings.ts` per
+ * `docs/PHASES.md:591` acceptance criterion 3.
  */
+
+import { getString } from "./theme/strings";
 
 export type TitleScreenOptions = {
   /** Default seed pre-filled in the input (e.g., today's date). */
@@ -100,7 +106,9 @@ export function renderTitleScreen(
     `[data-ui-field='${PASTE_FP_INPUT_FIELD}']`,
   );
 
-  const randomSeedLabel = `Random Seed (today: ${options.todayDate})`;
+  const randomSeedLabel = getString("title.randomSeedButton", {
+    date: options.todayDate,
+  });
 
   if (
     seedInput === null ||
@@ -114,26 +122,25 @@ export function renderTitleScreen(
 
     const heading = document.createElement("h2");
     heading.className = "title-screen-title";
-    heading.textContent = "ICEFALL";
+    heading.textContent = getString("title.heading");
     host.appendChild(heading);
 
     const subtitle = document.createElement("p");
     subtitle.className = "title-screen-subtitle";
-    subtitle.textContent =
-      "Deterministic-shareable cyberpunk roguelike. Pick a seed and start descending the stack.";
+    subtitle.textContent = getString("title.subtitle");
     host.appendChild(subtitle);
 
     // Seed input row.
     const seedLabel = document.createElement("label");
     seedLabel.className = "title-screen-input-row";
-    seedLabel.textContent = "Seed";
+    seedLabel.textContent = getString("title.seedLabel");
     seedInput = document.createElement("input");
     seedInput.type = "text";
     seedInput.id = "title-seed-input";
     seedInput.className = "title-screen-input";
     seedInput.dataset["uiField"] = SEED_INPUT_FIELD;
     seedInput.value = options.defaultSeed;
-    seedInput.placeholder = "alpha-1";
+    seedInput.placeholder = getString("title.seedPlaceholder");
     seedInput.autocomplete = "off";
     seedInput.spellcheck = false;
     seedLabel.appendChild(seedInput);
@@ -148,7 +155,7 @@ export function renderTitleScreen(
     newRunButton.id = "title-new-run";
     newRunButton.className = "title-screen-button title-screen-button-primary";
     newRunButton.dataset["uiField"] = NEW_RUN_BUTTON_FIELD;
-    newRunButton.textContent = "New Run";
+    newRunButton.textContent = getString("title.newRunButton");
     buttonRow.appendChild(newRunButton);
 
     randomSeedButton = document.createElement("button");
@@ -164,7 +171,7 @@ export function renderTitleScreen(
     pasteFpButton.id = "title-paste-fp";
     pasteFpButton.className = "title-screen-button";
     pasteFpButton.dataset["uiField"] = PASTE_FP_BUTTON_FIELD;
-    pasteFpButton.textContent = "Paste Fingerprint";
+    pasteFpButton.textContent = getString("title.pasteFpButton");
     buttonRow.appendChild(pasteFpButton);
 
     host.appendChild(buttonRow);
@@ -179,14 +186,13 @@ export function renderTitleScreen(
 
     const pasteLabel = document.createElement("label");
     pasteLabel.className = "title-screen-input-row";
-    pasteLabel.textContent = "Paste a fingerprint URL or 22-char fingerprint";
+    pasteLabel.textContent = getString("title.pasteLabel");
     pasteFpInput = document.createElement("textarea");
     pasteFpInput.id = "title-paste-fp-input";
     pasteFpInput.className = "title-screen-paste-input";
     pasteFpInput.dataset["uiField"] = PASTE_FP_INPUT_FIELD;
     pasteFpInput.rows = 3;
-    pasteFpInput.placeholder =
-      "https://porkchop.github.io/icefall/?run=...&seed=...";
+    pasteFpInput.placeholder = getString("title.pastePlaceholder");
     pasteFpInput.spellcheck = false;
     pasteLabel.appendChild(pasteFpInput);
     pasteRow.appendChild(pasteLabel);
@@ -195,7 +201,7 @@ export function renderTitleScreen(
     pasteSubmit.type = "button";
     pasteSubmit.id = "title-paste-submit";
     pasteSubmit.className = "title-screen-button";
-    pasteSubmit.textContent = "Open pasted run";
+    pasteSubmit.textContent = getString("title.pasteSubmit");
     pasteRow.appendChild(pasteSubmit);
 
     host.appendChild(pasteRow);
@@ -203,8 +209,7 @@ export function renderTitleScreen(
     // Footer help text.
     const footer = document.createElement("p");
     footer.className = "title-screen-footer";
-    footer.textContent =
-      "Tab to navigate · Enter to activate · The same seed always produces the same dungeon";
+    footer.textContent = getString("title.footer");
     host.appendChild(footer);
 
     // Wire button handlers (one-time, on first render).

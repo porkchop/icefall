@@ -16,6 +16,7 @@
 
 import type { RunState } from "../sim/types";
 import { fingerprint } from "../core/fingerprint";
+import { getString } from "./theme/strings";
 
 const WIN_MESSAGE_FIELD = "win-message";
 const WIN_FINGERPRINT_FIELD = "win-fingerprint";
@@ -51,7 +52,7 @@ export function renderWinScreen(host: HTMLElement, state: RunState): void {
     host.classList.add("win-screen");
     const heading = document.createElement("h2");
     heading.className = "win-screen-title";
-    heading.textContent = "ICEFALL — Run Complete";
+    heading.textContent = getString("winScreen.heading");
     host.appendChild(heading);
 
     messageEl = document.createElement("div");
@@ -63,7 +64,7 @@ export function renderWinScreen(host: HTMLElement, state: RunState): void {
     fingerprintRow.className = "win-screen-row";
     const fingerprintLabel = document.createElement("span");
     fingerprintLabel.className = "win-screen-label";
-    fingerprintLabel.textContent = "Fingerprint";
+    fingerprintLabel.textContent = getString("winScreen.fingerprintLabel");
     fingerprintEl = document.createElement("div");
     fingerprintEl.className = "win-screen-value win-screen-fingerprint";
     fingerprintEl.dataset["uiField"] = WIN_FINGERPRINT_FIELD;
@@ -75,7 +76,7 @@ export function renderWinScreen(host: HTMLElement, state: RunState): void {
     floorRow.className = "win-screen-row";
     const floorLabel = document.createElement("span");
     floorLabel.className = "win-screen-label";
-    floorLabel.textContent = "Final Floor";
+    floorLabel.textContent = getString("winScreen.floorLabel");
     floorEl = document.createElement("div");
     floorEl.className = "win-screen-value";
     floorEl.dataset["uiField"] = WIN_FLOOR_FIELD;
@@ -87,7 +88,7 @@ export function renderWinScreen(host: HTMLElement, state: RunState): void {
     hpRow.className = "win-screen-row";
     const hpLabel = document.createElement("span");
     hpLabel.className = "win-screen-label";
-    hpLabel.textContent = "Final HP";
+    hpLabel.textContent = getString("winScreen.hpLabel");
     hpEl = document.createElement("div");
     hpEl.className = "win-screen-value";
     hpEl.dataset["uiField"] = WIN_HP_FIELD;
@@ -97,13 +98,12 @@ export function renderWinScreen(host: HTMLElement, state: RunState): void {
   }
 
   if (state.outcome === "won") {
-    messageEl.textContent =
-      "You defeated the floor-10 boss. The shareable fingerprint below proves your run.";
+    messageEl.textContent = getString("winScreen.wonMessage");
   } else {
     // The host element is hidden by `src/main.ts` when outcome is not
     // "won"; we still update the message so the DOM reflects the
     // current state on a subsequent render.
-    messageEl.textContent = "Run not yet complete.";
+    messageEl.textContent = getString("winScreen.notWonMessage");
   }
   fingerprintEl.textContent = fingerprint(state.fingerprintInputs);
   floorEl.textContent = String(state.floorN);
