@@ -14,7 +14,12 @@ export default defineConfig({
   },
   test: {
     globals: false,
-    include: ["tests/**/*.test.ts", "src/**/*.test.ts", "eslint-rules/**/*.test.ts"],
+    include: [
+      "tests/**/*.test.ts",
+      "src/**/*.test.ts",
+      "eslint-rules/**/*.test.ts",
+      "tools/**/*.test.ts",
+    ],
     coverage: {
       provider: "v8",
       reporter: ["text", "html", "json-summary"],
@@ -25,8 +30,10 @@ export default defineConfig({
         "src/mapgen/**",
         "src/registries/**",
         "src/render/**",
+        "src/share/**",
         "src/sim/**",
         "src/ui/**",
+        "src/verifier/**",
       ],
       exclude: [
         "src/atlas/**/*.test.ts",
@@ -35,8 +42,10 @@ export default defineConfig({
         "src/mapgen/**/*.test.ts",
         "src/registries/**/*.test.ts",
         "src/render/**/*.test.ts",
+        "src/share/**/*.test.ts",
         "src/sim/**/*.test.ts",
         "src/ui/**/*.test.ts",
+        "src/verifier/**/*.test.ts",
         // Pure-type declaration files: no executable code, so v8
         // reports as 0/0 which fails the 100% threshold.
         "src/mapgen/types.ts",
@@ -107,6 +116,25 @@ export default defineConfig({
           statements: 95,
           functions: 100,
           branches: 85,
+        },
+        // Phase 8.A.2a coverage thresholds. The codec is pure
+        // (encode/decode), the verifier is a deterministic decision
+        // function — both are testable to 100% on lines / statements /
+        // functions. Branches at 90 leaves room for one or two
+        // defensive guards (e.g. `if (compressed === undefined)`-style
+        // paths that the test surface exercises but that v8 reports
+        // as a 1-of-2 sub-branch).
+        "src/share/**": {
+          lines: 100,
+          statements: 100,
+          functions: 100,
+          branches: 90,
+        },
+        "src/verifier/**": {
+          lines: 100,
+          statements: 100,
+          functions: 100,
+          branches: 90,
         },
       },
     },

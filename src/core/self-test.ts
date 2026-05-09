@@ -27,6 +27,8 @@ import {
 } from "../sim/self-test-win-log";
 import { ACTION_TYPE_WAIT } from "../sim/params";
 import { seedToBytes } from "./seed";
+import { encodeActionLog } from "../share/encode";
+import { decodeActionLog } from "../share/decode";
 import { generateAtlas } from "../atlas/generate";
 import {
   parseAtlasJson,
@@ -137,6 +139,20 @@ export const INVENTORY_DIGEST =
  */
 export const WIN_DIGEST =
   "fb36a2fe54e3581a6105ed0ef80afcf8269fc5f97ba633612028c54039828447";
+
+/**
+ * Cross-runtime golden digest for the Phase 8 action-log codec
+ * round-trip (memo decision 13). Equals `WIN_DIGEST` by construction:
+ * `runScripted(decodeActionLog(encodeActionLog(SELF_TEST_WIN_LOG)))`'s
+ * final state hash is the same as `runScripted(SELF_TEST_WIN_LOG)`'s
+ * because the codec is identity on the action sequence. This pin
+ * surfaces silent drift in the codec (zlibSync/unzlibSync byte
+ * identity, magic+version+actionCount header layout, decodeAction
+ * tag-validation rules) in any runtime (Node, Chromium, Firefox,
+ * WebKit). Any change to the codec contract is a `rulesetVersion`
+ * bump and requires `architecture-red-team` review.
+ */
+export const REPLAY_DIGEST = WIN_DIGEST;
 
 const DIRECTIONS = ["wait", "move", "use", "attack"] as const;
 
@@ -412,6 +428,36 @@ const checks: Check[] = [
       assert(
         got === WIN_DIGEST,
         `win-cross-runtime-digest mismatch: actual=${got}`,
+      );
+    },
+  },
+  {
+    name: "replay-cross-runtime-digest",
+    run() {
+      // Phase 8.A.2a (memo decision 13) — round-trip SELF_TEST_WIN_LOG
+      // through the action-log codec (encodeActionLog → decodeActionLog)
+      // and re-run via runScripted. The final state hash MUST equal
+      // REPLAY_DIGEST (which equals WIN_DIGEST by construction). Any
+      // silent drift in the codec — zlibSync/unzlibSync byte identity,
+      // magic+version+actionCount header layout, decodeAction
+      // tag-validation rules, base64url alphabet — surfaces here in
+      // any runtime (Node, Chromium, Firefox, WebKit) because all
+      // four runtimes call the same fflate `zlibSync(level: 1)` byte
+      // path that Phase 4's atlas-PNG encoder pinned cross-OS.
+      const wire = encodeActionLog(SELF_TEST_WIN_LOG);
+      const decoded = decodeActionLog(wire);
+      const result = runScripted({
+        inputs: SELF_TEST_WIN_INPUTS,
+        actions: decoded,
+      });
+      assert(
+        result.outcome === "won",
+        `replay-cross-runtime-digest: outcome must be "won", got "${result.outcome}"`,
+      );
+      const got = sha256Hex(result.finalState.stateHash);
+      assert(
+        got === REPLAY_DIGEST,
+        `replay-cross-runtime-digest mismatch: actual=${got}`,
       );
     },
   },
