@@ -22,6 +22,22 @@ export class FakeElement {
   readonly tagName: string;
   readonly classList: { add(c: string): void };
 
+  // Phase 9.A.2 — minimal surface extensions for the title-screen
+  // unit tests. These mirror the WHATWG DOM surface that
+  // `src/ui/title-screen.ts` touches; the e2e tests exercise the
+  // real DOM end-to-end.
+  readonly style: Record<string, string> = {};
+  readonly listeners: Map<string, ((e: unknown) => void)[]> = new Map();
+  // String-typed properties used by <input>/<textarea>/<button>.
+  type = "";
+  id = "";
+  value = "";
+  placeholder = "";
+  rows = 0;
+  spellcheck = false;
+  autocomplete = "";
+  tabIndex = -1;
+
   constructor(tagName: string) {
     this.tagName = tagName.toUpperCase();
     const dataAttrs = this.attributes;
@@ -50,6 +66,23 @@ export class FakeElement {
   appendChild(child: FakeElement): FakeElement {
     this.children.push(child);
     return child;
+  }
+
+  addEventListener(event: string, handler: (e: unknown) => void): void {
+    const arr = this.listeners.get(event) ?? [];
+    arr.push(handler);
+    this.listeners.set(event, arr);
+  }
+
+  /** Fire all registered handlers for `event`. Test-only helper. */
+  dispatch(event: string, eventArg: unknown = {}): void {
+    const arr = this.listeners.get(event);
+    if (!arr) return;
+    for (const h of arr) h(eventArg);
+  }
+
+  focus(): void {
+    // No-op for the fake DOM — focus is real-browser only.
   }
 
   get textContent(): string {

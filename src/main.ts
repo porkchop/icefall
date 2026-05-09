@@ -27,6 +27,7 @@ import { renderHud } from "./ui/hud";
 import { renderInventory } from "./ui/inventory";
 import { renderEquipment } from "./ui/equipment";
 import { renderWinScreen } from "./ui/win-screen";
+import { renderTitleScreen } from "./ui/title-screen";
 import type { RunState } from "./sim/types";
 import type { Action } from "./core/encode";
 // Phase 8.A.2b — verifier + save layer + URL router (memo decision
@@ -98,6 +99,12 @@ declare global {
       | "skipped"
       | undefined;
     __URL_CANONICALIZED__: "true" | "false" | undefined;
+    // Phase 9.A.2 — title-screen activation flag. "active" when the
+    // bare URL has no seed source anywhere (no `?seed=`, `?run=`,
+    // or `#seed=`); "skipped" when any seed source is present so
+    // the page boots straight into the playable game (preserves the
+    // deep-link UX from Phase 5 and the share-URL flow from Phase 8).
+    __TITLE_SCREEN__: "active" | "skipped" | undefined;
   }
 }
 
@@ -973,17 +980,25 @@ async function startGame(host: HTMLElement): Promise<void> {
     return;
   }
 
-  // 3. Build the initial RunState from the URL-hash seed (or the
-  //    default). The hash-state already exists on the diagnostic page;
-  //    the playable game shares it so a deep link works for both.
+  // 3. Build the initial RunState from the URL seed.
+  //    Phase 9.A.2: prefer `?seed=` (query string) over `#seed=`
+  //    (legacy hash fragment from Phase 5). The Phase 9 title screen
+  //    navigates via `?seed=<s>` (Phase 8 share-URL convention); the
+  //    Phase 5 diagnostic floor-preview deep links use `#seed=&floor=`.
+  //    Both paths are honored; query-string wins when both are set.
+  const querySeedRaw = new URLSearchParams(window.location.search).get("seed");
   const hashState = readHashState();
+  const seed =
+    querySeedRaw !== null && querySeedRaw.length > 0
+      ? querySeedRaw
+      : hashState.seed;
   const inputs = {
     commitHash,
     rulesetVersion,
-    seed: hashState.seed,
+    seed,
     modIds: [] as readonly string[],
   };
-  const streams = streamsForRun(seedToBytes(hashState.seed));
+  const streams = streamsForRun(seedToBytes(seed));
   let state: RunState = buildInitialRunState(inputs, streams);
 
   const target: RenderTarget = {
@@ -1197,6 +1212,54 @@ async function applyRouting(): Promise<boolean> {
   return false;
 }
 
+/**
+ * Phase 9.A.2 — should the title screen render on this page load?
+ *
+ * The title screen renders on the BARE URL (no seed source anywhere).
+ * Any of `?seed=`, `?run=`, or `#seed=` skips the title screen and
+ * boots straight into the game — preserving Phase 5's deep-link UX
+ * and Phase 8's share-URL flow.
+ */
+function shouldShowTitleScreen(): boolean {
+  const search = new URLSearchParams(window.location.search);
+  // Code-review S2 fix: an empty `?seed=` (no value) does NOT count
+  // as a seed source — the downstream `startGame` consumer requires
+  // length > 0. Skipping the title screen on `?seed=` empty would
+  // boot the game with the hardcoded "diagnostic-sample" fallback,
+  // surprising the user. Same rule for `?run=` (parseShareUrl
+  // rejects an empty fp and the router surfaces ROUTE_ERR_FP_INVALID,
+  // which is a worse UX than just showing the title screen).
+  const seedQuery = search.get("seed");
+  const runQuery = search.get("run");
+  if ((seedQuery !== null && seedQuery.length > 0) ||
+      (runQuery !== null && runQuery.length > 0)) {
+    return false;
+  }
+  const hash = window.location.hash.startsWith("#")
+    ? window.location.hash.slice(1)
+    : window.location.hash;
+  if (hash.length > 0) {
+    const hashParams = new URLSearchParams(hash);
+    const seedHash = hashParams.get("seed");
+    if (seedHash !== null && seedHash.length > 0) return false;
+  }
+  return true;
+}
+
+/**
+ * Phase 9.A.2 — today's date in YYYY-MM-DD form (UTC). Computed in
+ * `main.ts` (which IS allowed to use `Date`) and passed into the
+ * title screen as an option (the `src/ui/**` layer is banned from
+ * `Date` per Phase 5 frozen contract).
+ */
+function todayUtcDate(): string {
+  const d = new Date();
+  const yyyy = d.getUTCFullYear().toString().padStart(4, "0");
+  const mm = (d.getUTCMonth() + 1).toString().padStart(2, "0");
+  const dd = d.getUTCDate().toString().padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
 async function bootstrap(): Promise<void> {
   const root = document.getElementById("app");
   if (!root) return;
@@ -1213,10 +1276,77 @@ async function bootstrap(): Promise<void> {
     el(
       "p",
       "subtitle",
-      "Phase 5: deterministic core engine + playable game UI.",
+      "Deterministic-shareable cyberpunk roguelike — phase 9 polish.",
     ),
   );
   root.appendChild(header);
+
+  // Phase 9.A.2 — title-screen gate. On the bare URL (no seed source),
+  // render the title screen INSTEAD of the game. The user picks a
+  // seed and clicks "New Run", which navigates to `?seed=<s>` →
+  // full page reload → bootstrap re-enters with a seed source →
+  // skips title screen → boots into the game.
+  if (shouldShowTitleScreen()) {
+    window.__TITLE_SCREEN__ = "active";
+    const titleSection = el("section", "title-screen-host");
+    titleSection.id = "title-screen";
+    root.appendChild(titleSection);
+
+    renderTitleScreen(titleSection, {
+      defaultSeed: todayUtcDate(),
+      todayDate: todayUtcDate(),
+      onNewRun: (seed) => {
+        const target = new URL(window.location.href);
+        target.search = "";
+        target.searchParams.set("seed", seed);
+        target.hash = "";
+        window.location.assign(target.toString());
+      },
+      onRandomSeed: (dateSeed) => {
+        const target = new URL(window.location.href);
+        target.search = "";
+        target.searchParams.set("seed", dateSeed);
+        target.hash = "";
+        window.location.assign(target.toString());
+      },
+      onPasteFingerprint: (pasted) => {
+        // If the pasted text looks like a URL with an http(s) scheme,
+        // navigate to it directly — `applyRouting` on the next page
+        // load handles the parse + redirect. Schemes other than http
+        // and https are REJECTED to prevent self-XSS via `javascript:`
+        // or `data:` URIs (code-review S1 fix). Otherwise, treat as a
+        // raw fingerprint and navigate to `?run=<fp>` with no seed;
+        // the routing path surfaces ROUTE_ERR_SEED_MISSING which the
+        // user can resolve by editing the URL.
+        let parsedAsUrl: URL | null = null;
+        try {
+          const u = new URL(pasted);
+          if (u.protocol === "http:" || u.protocol === "https:") {
+            parsedAsUrl = u;
+          }
+        } catch {
+          // Not a URL — fall through to the raw-fingerprint path below.
+        }
+        if (parsedAsUrl !== null) {
+          window.location.assign(parsedAsUrl.toString());
+          return;
+        }
+        const target = new URL(window.location.href);
+        target.search = "";
+        target.searchParams.set("run", pasted);
+        target.hash = "";
+        window.location.assign(target.toString());
+      },
+    });
+
+    // The diagnostic page still renders below the title screen so
+    // power users can verify pasted logs / inspect saves without
+    // having to start a run first.
+    renderDiagnostic(root);
+    return;
+  }
+
+  window.__TITLE_SCREEN__ = "skipped";
 
   // Render the playable game first so the canvas is the visual
   // priority. The diagnostic surface follows below.

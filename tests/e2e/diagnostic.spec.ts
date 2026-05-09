@@ -294,7 +294,10 @@ for (const preset of PRESET_HASHES) {
 test("playable game section is visible and __GAME_READY__ === 'ready'", async ({
   page,
 }) => {
-  await page.goto("/");
+  // Phase 9.A.2: bare URL renders the title screen instead of the
+  // game; navigate with `?seed=` to bypass the title screen and
+  // exercise the playable-game surface.
+  await page.goto("/?seed=diagnostic-sample");
   await page.waitForFunction(
     () => window.__GAME_READY__ === "ready" || window.__GAME_READY__ === "error",
     null,
@@ -310,7 +313,7 @@ test("playable game section is visible and __GAME_READY__ === 'ready'", async ({
 test("game HUD reflects the initial RunState (HP, floor, outcome)", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto("/?seed=diagnostic-sample");
   await page.waitForFunction(
     () => window.__GAME_READY__ === "ready",
     null,
@@ -332,7 +335,7 @@ test("game HUD reflects the initial RunState (HP, floor, outcome)", async ({
 });
 
 test("five movement keys advance the sim state hash", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/?seed=diagnostic-sample");
   await page.waitForFunction(
     () => window.__GAME_READY__ === "ready",
     null,
@@ -390,7 +393,7 @@ test("diagnostic surface is preserved in a <details> wrapper", async ({
 test("inventory + equipment panels render alongside the canvas", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto("/?seed=diagnostic-sample");
   await page.waitForFunction(
     () => window.__GAME_READY__ === "ready",
     null,
@@ -411,7 +414,7 @@ test("inventory + equipment panels render alongside the canvas", async ({
 test("pressing G triggers the pickup action (state hash advances)", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto("/?seed=diagnostic-sample");
   await page.waitForFunction(
     () => window.__GAME_READY__ === "ready",
     null,
@@ -643,5 +646,162 @@ test("Replay-mode URL: ?mode=replay with a matching ?run= populates __REPLAY_FIN
   expect(
     await page.evaluate(() => window.__ROUTER_AUTO_DECISION_KIND__),
   ).toBe("boot-replay");
+});
+
+// ----------------------------------------------------------------------
+// Phase 9.A.2 — title-screen tests.
+//
+// The bare URL renders the title screen (no game canvas yet); a seed
+// query parameter or run/seed share URL bypasses the title screen and
+// boots straight into the game.
+// ----------------------------------------------------------------------
+
+test("Phase 9 title screen renders on the bare URL with __TITLE_SCREEN__ = 'active'", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.waitForFunction(
+    () => typeof window.__TITLE_SCREEN__ === "string",
+    null,
+    { timeout: 10_000 },
+  );
+  expect(await page.evaluate(() => window.__TITLE_SCREEN__)).toBe("active");
+  await expect(page.locator("#title-screen")).toBeVisible();
+  await expect(page.locator("#title-seed-input")).toBeVisible();
+  await expect(page.locator("#title-new-run")).toBeVisible();
+  await expect(page.locator("#title-random-seed")).toBeVisible();
+  await expect(page.locator("#title-paste-fp")).toBeVisible();
+  // Game canvas is NOT rendered when the title screen is active.
+  await expect(page.locator("#game-canvas")).toHaveCount(0);
+});
+
+test("Phase 9 title screen pre-fills the seed input with today's UTC date (YYYY-MM-DD)", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.waitForFunction(
+    () => typeof window.__TITLE_SCREEN__ === "string",
+    null,
+    { timeout: 10_000 },
+  );
+  const seedValue = await page.locator("#title-seed-input").inputValue();
+  expect(seedValue).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+});
+
+test("Phase 9 title screen is SKIPPED when ?seed= is present (boots into game)", async ({
+  page,
+}) => {
+  await page.goto("/?seed=diagnostic-sample");
+  await page.waitForFunction(
+    () =>
+      typeof window.__TITLE_SCREEN__ === "string" ||
+      typeof window.__GAME_READY__ === "string",
+    null,
+    { timeout: 10_000 },
+  );
+  expect(await page.evaluate(() => window.__TITLE_SCREEN__)).toBe("skipped");
+  await expect(page.locator("#title-screen")).toHaveCount(0);
+  await page.waitForFunction(
+    () => window.__GAME_READY__ === "ready" || window.__GAME_READY__ === "error",
+    null,
+    { timeout: 10_000 },
+  );
+  await expect(page.locator("#game")).toBeVisible();
+});
+
+test("Phase 9 title screen 'New Run' click navigates to ?seed=<typed-seed>", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.waitForFunction(
+    () => window.__TITLE_SCREEN__ === "active",
+    null,
+    { timeout: 10_000 },
+  );
+  await page.locator("#title-seed-input").fill("phase-9-e2e-test");
+  await page.locator("#title-new-run").click();
+  // Wait for the navigation to settle.
+  await page.waitForURL(/\?seed=phase-9-e2e-test/, { timeout: 5_000 });
+  // After navigation, title screen is skipped + game boots.
+  expect(await page.evaluate(() => window.__TITLE_SCREEN__)).toBe("skipped");
+});
+
+test("Phase 9 title screen 'Random Seed' click navigates to ?seed=<today-date>", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.waitForFunction(
+    () => window.__TITLE_SCREEN__ === "active",
+    null,
+    { timeout: 10_000 },
+  );
+  await page.locator("#title-random-seed").click();
+  // The new URL has ?seed=YYYY-MM-DD. The exact value is the current
+  // UTC date; assert the format rather than a specific date.
+  await page.waitForURL(/\?seed=\d{4}-\d{2}-\d{2}/, { timeout: 5_000 });
+});
+
+test("Phase 9 title screen 'Paste Fingerprint' shows the textarea", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.waitForFunction(
+    () => window.__TITLE_SCREEN__ === "active",
+    null,
+    { timeout: 10_000 },
+  );
+  // Paste-row is hidden initially.
+  await expect(page.locator("#title-paste-row")).toBeHidden();
+  await page.locator("#title-paste-fp").click();
+  await expect(page.locator("#title-paste-row")).toBeVisible();
+  await expect(page.locator("#title-paste-fp-input")).toBeVisible();
+});
+
+test("Phase 9 title screen Enter on the seed input activates 'New Run'", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.waitForFunction(
+    () => window.__TITLE_SCREEN__ === "active",
+    null,
+    { timeout: 10_000 },
+  );
+  await page.locator("#title-seed-input").fill("enter-test-seed");
+  await page.locator("#title-seed-input").press("Enter");
+  await page.waitForURL(/\?seed=enter-test-seed/, { timeout: 5_000 });
+});
+
+test("Phase 9 diagnostic page still renders below the title screen on bare URL", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.waitForFunction(
+    () => typeof window.__TITLE_SCREEN__ === "string",
+    null,
+    { timeout: 10_000 },
+  );
+  // Title screen + diagnostic surface should both render so power
+  // users can verify pasted logs without first picking a seed.
+  await expect(page.locator("#title-screen")).toBeVisible();
+  await expect(page.locator("#diagnostics")).toBeVisible();
+  await expect(page.locator("#self-test-banner")).toBeVisible();
+  await expect(page.locator("#verify-pasted")).toBeVisible();
+});
+
+test("Phase 9 title screen still shows on empty ?seed= (code-review S2 fix)", async ({
+  page,
+}) => {
+  // An empty `?seed=` (no value) does NOT count as a seed source —
+  // the downstream startGame consumer requires length > 0. Without
+  // this fix, the empty seed would silently boot the game with the
+  // hardcoded "diagnostic-sample" fallback, surprising the user.
+  await page.goto("/?seed=");
+  await page.waitForFunction(
+    () => typeof window.__TITLE_SCREEN__ === "string",
+    null,
+    { timeout: 10_000 },
+  );
+  expect(await page.evaluate(() => window.__TITLE_SCREEN__)).toBe("active");
+  await expect(page.locator("#title-screen")).toBeVisible();
 });
 
