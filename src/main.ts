@@ -12,6 +12,10 @@ import {
   SELF_TEST_INPUTS,
   SELF_TEST_LOG_100,
 } from "./sim/self-test-log";
+import {
+  SELF_TEST_WIN_INPUTS,
+  SELF_TEST_WIN_LOG,
+} from "./sim/self-test-win-log";
 import { generateAtlas } from "./atlas/generate";
 import { ATLAS_PRESET_SEEDS } from "./atlas/preset-seeds";
 import { ATLAS_SEED_DEFAULT } from "./atlas/params";
@@ -36,6 +40,15 @@ declare global {
     __SIM_FINAL_STATE_HASH__: string | undefined;
     __SIM_OUTCOME__: "running" | "dead" | "won" | undefined;
     __SIM_FLOOR_REACHED__: number | undefined;
+    // Phase 7.B — winning-replay cross-runtime determinism flags. The
+    // diagnostic page runs `SELF_TEST_WIN_LOG` against
+    // `SELF_TEST_WIN_INPUTS` once at page load, exposes the resulting
+    // sha256-hex final state hash, and the cross-runtime Playwright
+    // suite asserts equality with `WIN_DIGEST` on chromium / firefox /
+    // webkit (mirrors the SIM_DIGEST → __SIM_FINAL_STATE_HASH__ pattern
+    // from Phase 3).
+    __SIM_WIN_FINAL_STATE_HASH__: string | undefined;
+    __SIM_WIN_OUTCOME__: "running" | "dead" | "won" | undefined;
     __ATLAS_PREVIEW__: "ready" | undefined;
     __ATLAS_PREVIEW_BUILD_HASH__: string | undefined;
     __ATLAS_PREVIEW_LIVE_HASH__: string | undefined;
@@ -296,6 +309,61 @@ function renderDiagnostic(host: HTMLElement): void {
   runSim();
 
   root.appendChild(simSection);
+
+  // Phase 7.B: winning-replay section. Re-uses the same harness as the
+  // Phase 3 scripted-playthrough section but on the Phase 7 winning
+  // log. Cross-runtime: any drift in the talk/buy/sell handlers, the
+  // shop-stock / shop-price roll domains, the boss FSM phase
+  // transitions, or the boss-room spawn override surfaces here in any
+  // runtime via the `WIN_DIGEST` golden.
+  const winSection = el("section", "scripted-sim");
+  winSection.id = "sim-win-replay";
+  winSection.appendChild(el("h2", undefined, "Winning replay"));
+  winSection.appendChild(
+    el(
+      "p",
+      "scripted-help",
+      "Phase 7 win loop: replay a synthesized 1217-action log that buys upgrades, descends to floor 10, and defeats the boss. The final state hash is pinned by WIN_DIGEST.",
+    ),
+  );
+
+  const winButton = document.createElement("button");
+  winButton.type = "button";
+  winButton.id = "scripted-win-run";
+  winButton.textContent = "Run winning replay";
+  winSection.appendChild(winButton);
+
+  const winOutput = el("dl", "scripted-output");
+  winOutput.id = "scripted-win-output";
+  winSection.appendChild(winOutput);
+
+  function runWin(): void {
+    const result = runScripted({
+      inputs: SELF_TEST_WIN_INPUTS,
+      actions: SELF_TEST_WIN_LOG,
+    });
+    const finalHash = sha256Hex(result.finalState.stateHash);
+    window.__SIM_WIN_FINAL_STATE_HASH__ = finalHash;
+    window.__SIM_WIN_OUTCOME__ = result.outcome;
+
+    winOutput.innerHTML = "";
+    function addRow(label: string, value: string): void {
+      winOutput.appendChild(el("dt", undefined, label));
+      winOutput.appendChild(el("dd", undefined, value));
+    }
+    addRow("final state hash", finalHash);
+    addRow("outcome", result.outcome);
+    addRow("floor reached", String(result.finalState.floorN));
+    addRow("logLength", String(result.logLength));
+  }
+
+  winButton.addEventListener("click", () => {
+    runWin();
+  });
+
+  runWin();
+
+  root.appendChild(winSection);
 
   // Phase 4.A.2: atlas preview UI.
   const atlasSection = el("section", "atlas-preview");

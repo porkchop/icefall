@@ -9,19 +9,13 @@ const SIM_DIGEST =
 // Phase 7.A.2b — final state hash after running the synthesized
 // winning action log against `SELF_TEST_WIN_INPUTS`. Pinned in
 // `src/core/self-test.ts:WIN_DIGEST` and mirrored here per the Phase
-// 4 addendum N12 mirror invariant. The Phase 7.B cross-runtime
-// Playwright job will assert this digest end-to-end via the browser
-// self-test `win-cross-runtime-digest` entry which runs the same log
-// inside chromium / firefox / webkit and reports green via the
-// existing `__SELF_TEST_DETAILS__` surface.
+// 4 addendum N12 mirror invariant. Phase 7.B asserts this digest
+// end-to-end via the explicit `__SIM_WIN_FINAL_STATE_HASH__` window
+// flag set by `src/main.ts`'s winning-replay section, exercised on
+// chromium / firefox / webkit by the `winning-replay section runs
+// and reports the WIN_DIGEST` test below.
 const WIN_DIGEST =
   "fb36a2fe54e3581a6105ed0ef80afcf8269fc5f97ba633612028c54039828447";
-// Reference WIN_DIGEST so the constant participates in the linted
-// mirror invariant; the assertion lives inside the browser self-test
-// (the diagnostic page surfaces all self-test failures via
-// `__SELF_TEST_DETAILS__`). Phase 7.B will land an explicit
-// `__SIM_WIN_FINAL_STATE_HASH__` window flag and a dedicated test.
-void WIN_DIGEST;
 
 // Phase 7.A.1 — atlas regenerated to add the 3 missing Phase 3 item
 // recipes (item.stim-patch, item.trauma-pack, item.cyberdeck-mod-1)
@@ -186,6 +180,48 @@ test("scripted-playthrough button is idempotent — re-clicking produces same ha
   expect(outcome).toBe("running");
 });
 
+// Phase 7.B winning-replay tests. Mirror of the SIM_DIGEST →
+// __SIM_FINAL_STATE_HASH__ pattern above. The diagnostic page runs
+// SELF_TEST_WIN_LOG once at page load; the cross-runtime Playwright
+// suite asserts equality with WIN_DIGEST on chromium / firefox /
+// webkit, surfacing any silent drift in the Phase 7 talk/buy/sell
+// handlers, shop-stock / shop-price roll domains, boss FSM phase
+// transitions, or boss-room spawn override.
+
+test("winning-replay section runs and reports the WIN_DIGEST", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await expect(page.locator("#sim-win-replay")).toBeVisible();
+  await page.waitForFunction(
+    () => typeof window.__SIM_WIN_FINAL_STATE_HASH__ === "string",
+    null,
+    { timeout: 15_000 },
+  );
+  const hash = await page.evaluate(() => window.__SIM_WIN_FINAL_STATE_HASH__);
+  expect(hash).toBe(WIN_DIGEST);
+  const outcome = await page.evaluate(() => window.__SIM_WIN_OUTCOME__);
+  expect(outcome).toBe("won");
+});
+
+test("winning-replay button is idempotent — re-clicking produces same hash", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.waitForFunction(
+    () => typeof window.__SIM_WIN_FINAL_STATE_HASH__ === "string",
+    null,
+    { timeout: 15_000 },
+  );
+  const a = await page.evaluate(() => window.__SIM_WIN_FINAL_STATE_HASH__);
+  await page.locator("#scripted-win-run").click();
+  const b = await page.evaluate(() => window.__SIM_WIN_FINAL_STATE_HASH__);
+  expect(a).toBe(b);
+  expect(a).toBe(WIN_DIGEST);
+  const outcome = await page.evaluate(() => window.__SIM_WIN_OUTCOME__);
+  expect(outcome).toBe("won");
+});
+
 // Phase 4.A.2 atlas preview UI tests (memo decision 9 + addendum N12).
 
 test("atlas preview UI is visible and ready", async ({ page }) => {
@@ -336,6 +372,7 @@ test("diagnostic surface is preserved in a <details> wrapper", async ({
   await expect(page.locator("#self-test-banner")).toBeVisible();
   await expect(page.locator("#floor-preview")).toBeVisible();
   await expect(page.locator("#sim-scripted")).toBeVisible();
+  await expect(page.locator("#sim-win-replay")).toBeVisible();
   await expect(page.locator("#atlas-preview")).toBeVisible();
 });
 
