@@ -939,3 +939,66 @@ test("Phase 9 CRT shader toggle aria-pressed reflects state", async ({
   expect(await page.evaluate(() => window.__CRT_SHADER__)).toBe("off");
 });
 
+// ----------------------------------------------------------------------
+// Phase 9.B — v1 acceptance flow (end-to-end smoke for the v1 release).
+//
+// Per docs/PHASES.md:589 acceptance criterion 1 ('A first-time visitor
+// can land on the GitHub Pages URL, click "New Run," and play to
+// floor 1 without reading docs'), this single test exercises the
+// entire boot path:
+//   1. Bare URL → title screen renders + __TITLE_SCREEN__='active'
+//   2. Type a seed + click "New Run" → URL navigates to ?seed=<typed>
+//   3. New page → game canvas renders + __GAME_READY__='ready'
+//   4. Player is on floor 1 (HUD's FLOOR field reads "1")
+//   5. State hash is computed (deterministic core pipeline working)
+// ----------------------------------------------------------------------
+
+test("Phase 9.B v1 acceptance: title → New Run → floor 1 playable", async ({
+  page,
+}) => {
+  // Step 1: bare URL renders title screen.
+  await page.goto("/");
+  await page.waitForFunction(
+    () => window.__TITLE_SCREEN__ === "active",
+    null,
+    { timeout: 10_000 },
+  );
+  await expect(page.locator("#title-screen")).toBeVisible();
+
+  // Step 2: type seed, click New Run, page navigates.
+  await page.locator("#title-seed-input").fill("v1-acceptance-test-seed");
+  await page.locator("#title-new-run").click();
+  await page.waitForURL(/\?seed=v1-acceptance-test-seed/, { timeout: 5_000 });
+
+  // Step 3: game boots on the new URL.
+  await page.waitForFunction(
+    () =>
+      window.__GAME_READY__ === "ready" || window.__GAME_READY__ === "error",
+    null,
+    { timeout: 10_000 },
+  );
+  expect(await page.evaluate(() => window.__GAME_READY__)).toBe("ready");
+  await expect(page.locator("#game")).toBeVisible();
+  await expect(page.locator("#game-canvas")).toBeVisible();
+
+  // Step 4: HUD shows floor 1 (the player just spawned).
+  await expect(page.locator("[data-hud-field='floor']")).toContainText("1");
+
+  // Step 5: state hash is a 64-char hex string (deterministic-core
+  // pipeline produced a real RunState; sim/render/atlas all wired).
+  const stateHash = await page.evaluate(() => window.__GAME_STATE_HASH__);
+  expect(stateHash).toBeTruthy();
+  expect(stateHash!).toMatch(/^[0-9a-f]{64}$/);
+
+  // Step 6 (a11y bonus from 9.A.8): canvas exposes role + aria-label
+  // so a screen-reader user could complete the same flow.
+  await expect(page.locator("#game-canvas")).toHaveAttribute(
+    "role",
+    "application",
+  );
+  const ariaLabel = await page
+    .locator("#game-canvas")
+    .getAttribute("aria-label");
+  expect(ariaLabel).toContain("ICEFALL");
+});
+

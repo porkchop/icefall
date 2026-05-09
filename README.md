@@ -162,13 +162,48 @@ A custom `eslint-rules/no-float-arithmetic.cjs` lint rule + several
 
 ## Performance
 
-- JS bundle: **41 KB gzipped** (110 KB CI budget per Phase 8 memo
+- JS bundle: **~43 KB gzipped** (110 KB CI budget per Phase 8 memo
   decision 16). Includes fflate (used by the atlas encoder + the
   action-log codec) plus all Phase 8 layers.
 - Atlas binary: **1610 bytes** (256 KB Phase 4 budget).
 - Cross-OS atlas-equality: pairwise SHA-256 byte-equality verified
   on `ubuntu-latest` / `macos-latest` / `windows-latest` runners on
   every commit (Phase 4.B `cross-os-atlas-equality` matrix).
+
+### Lighthouse audit (Phase 9.B acceptance criterion)
+
+Per `docs/PHASES.md:590` acceptance criterion 2, the live deploy at
+`https://porkchop.github.io/icefall/` must score **> 90 on
+Performance and Best-Practices** in Lighthouse. To reproduce the
+audit:
+
+```sh
+# 1. Build + serve the production bundle
+npm run build
+npx vite preview --port 4173 --host 127.0.0.1 &
+
+# 2. Run Lighthouse against the title-screen + a typical run URL
+npx lighthouse http://127.0.0.1:4173/icefall/ \
+    --only-categories=performance,best-practices \
+    --output=json \
+    --quiet \
+    --chrome-flags="--headless"
+
+npx lighthouse http://127.0.0.1:4173/icefall/?seed=lighthouse-audit \
+    --only-categories=performance,best-practices \
+    --output=json \
+    --quiet \
+    --chrome-flags="--headless"
+```
+
+Both URLs should report Performance + Best-Practices >= 90. The
+title-screen URL exercises the bare-deploy path; the
+`?seed=lighthouse-audit` URL exercises the playable-game path
+(canvas + atlas + sim wired up).
+
+CI integration of this audit is deferred to a v1.1 polish update;
+for v1, the audit is a documented manual verification target run
+on the live deploy after each push by the maintainer.
 
 ## Browser support
 
