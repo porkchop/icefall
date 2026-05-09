@@ -312,3 +312,38 @@ body {
   letter-spacing: 0.08em;
   user-select: none;
 }
+
+/*
+ * Phase 9.A.1 — accessibility: prefers-reduced-motion gate.
+ *
+ * The deterministic core has no animations on the state-hash chain,
+ * so no gameplay-relevant motion is at risk. The override below
+ * ensures that any future UI animations (transitions, transforms,
+ * keyframes) added in subsequent polish iterations honor the user's
+ * system preference. Per WCAG 2.3 SC and the docs/PHASES.md:586
+ * acceptance criterion.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/*
+ * Phase 9.A.1 — accessibility: visible focus ring for keyboard users.
+ *
+ * The canvas is `tabindex=0` (so it accepts focus for the
+ * keyboard-driven game loop), and the diagnostic page's input
+ * elements need a visible focus indicator. The default browser
+ * outline is preserved but reinforced here with a high-contrast
+ * neon-accent color matching the cyberpunk palette.
+ */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
