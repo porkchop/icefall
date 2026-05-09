@@ -9,6 +9,48 @@ them is a `rulesetVersion` bump and breaks every fingerprint shared
 before the change. Treat them as carefully as a wire protocol — because
 that is what they are.
 
+## How to read this doc
+
+Two flavors of content live here:
+
+- **Frozen contracts** — load-bearing byte-level definitions (stream
+  derivation, action descriptor encoding, fingerprint pre-image, atlas
+  PNG layout, the action-log envelope, etc.). These are pinned to the
+  bit; changing any of them requires either an explicit
+  `rulesetVersion` bump (reviewed by `architecture-red-team`) or a fix
+  to the regression that caused the change. Sections that begin with
+  *"Phase N frozen contracts"* are entirely frozen-contract content.
+- **Background notes** — system overview, layer boundaries, lint
+  inventory, runtime dependencies, testing strategy, operational
+  concerns. These are documentation; they evolve as the project does.
+  Updates here do not require a `rulesetVersion` bump.
+
+When in doubt: anything inside a fenced code block under a "Phase N
+frozen contracts" header is frozen. Prose around it is descriptive.
+
+## Quick navigation
+
+- [System overview](#system-overview) — high-level browser-process diagram
+- [Layer boundaries](#layer-boundaries) — 13-layer import-allow / forbid table
+- **Frozen contracts** by phase:
+  - [Stream derivation](#stream-derivation) (Phase 1)
+  - [`RunStreams.__consumed`](#runstreams__consumed-phase-2-addition) (Phase 2)
+  - [Floor data model](#floor-data-model-phase-2) + [JSON schema](#floor-json-canonical-schema-phase-2) (Phase 2)
+  - [Stable-ID registries](#stable-id-registries-phase-2) (Phase 2)
+  - [`seedToBytes`](#seedtobytes-phase-2) (Phase 2)
+  - [State-hash chain](#state-hash-chain) (Phase 1)
+  - [Action descriptor encoding](#action-descriptor-encoding) (Phase 1)
+  - [Run fingerprint](#run-fingerprint) (Phase 1)
+  - [Phase 3 — entity model, turn loop, combat](#phase-3-frozen-contracts-entity-model-turn-loop-combat)
+  - [Phase 4 — atlas pipeline](#phase-4-frozen-contracts-atlas-pipeline)
+  - [Phase 5 — renderer + input + ui](#phase-5-frozen-contracts-renderer--input--ui)
+  - [Phase 6 — items + currency + equipment](#phase-6-frozen-contracts-items--currency--equipment)
+  - [Phase 7 — NPCs + shops + boss](#phase-7-frozen-contracts-npcs--shops--boss)
+  - [Phase 8 — run fingerprint, replay, saves, content-addressed releases](#phase-8-frozen-contracts-run-fingerprint-replay-saves-content-addressed-releases)
+- [Build-time constants](#build-time-constants) — `__COMMIT_HASH__` + `__RULESET_VERSION__` injection
+- [Lint rule inventory](#lint-rule-inventory) — every layer's enforcement table
+- [Runtime dependencies](#runtime-dependencies) + [Testing strategy](#testing-strategy) + [Operational concerns](#operational-concerns)
+
 ## System overview
 
 ```
@@ -34,12 +76,36 @@ that is what they are.
 │                          │ print)   │                               │
 │                          └──────────┘                               │
 │                                                                     │
+│  ─────── Phase 8 sharing layers (peers; do not feed sim) ────────── │
+│                                                                     │
+│  ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐       │
+│  │ router/  │───▶│  share/  │    │ verifier/│    │  save/   │       │
+│  │  (URL    │    │ (action- │    │  (paste- │    │ (locale- │       │
+│  │  parse + │    │ log codec│    │  log →   │    │  storage │       │
+│  │  redirect)│   │+zlibSync)│    │ replay)  │    │  slots)  │       │
+│  └──────────┘    └──────────┘    └──────────┘    └──────────┘       │
+│                                                                     │
+│  ───── Phase 5 + 7 + 9 user-visible UI layer (read-only sink) ───── │
+│                                                                     │
+│  ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐       │
+│  │  ui/hud  │    │   ui/    │    │  ui/win  │    │ ui/title │       │
+│  │   ui/    │    │inventory │    │ -screen  │    │ -screen  │       │
+│  │ equipment│    │          │    │ (Phase 7)│    │(Phase 9) │       │
+│  └──────────┘    └──────────┘    └──────────┘    └──────────┘       │
+│                                                                     │
+│            All UI text routes through ui/theme/strings (Phase 9)    │
+│                                                                     │
 │  Build-time only: tools/gen-atlas.ts → assets/atlas.{png,json}      │
+│  Build-pipeline: scripts/build-dual.mjs + publish-dual.mjs (Phase 8)│
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-Phase 1 builds `core/` only. The remaining boxes are stubbed; they slot
-in as their phases land.
+Phase 8 added the four "sharing" peer layers (`router`, `share`,
+`verifier`, `save`) that consume simulation outputs but do NOT feed
+the simulation — they sit alongside `sim/` rather than above or below
+it. The `tests/build/rules-files-reachability.test.ts` gate enforces
+the anti-cycle: nothing in `router/` / `share/` / `verifier/` / `save/`
+is reachable from `src/sim/harness.ts`'s static-import graph.
 
 ## Layer boundaries
 
