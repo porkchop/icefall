@@ -4,11 +4,11 @@ import { atlasBinaryHashPlugin } from "./scripts/vite-plugin-atlas-binary-hash.m
 
 function readCommitHash(): string {
   try {
-    return execSync("git rev-parse --short=7 HEAD", { stdio: ["ignore", "pipe", "ignore"] })
+    return execSync("git rev-parse --short=12 HEAD", { stdio: ["ignore", "pipe", "ignore"] })
       .toString()
       .trim();
   } catch {
-    return "dev0000";
+    return "dev000000000";
   }
 }
 

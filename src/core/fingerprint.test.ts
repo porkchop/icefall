@@ -12,7 +12,7 @@ import { sha256Hex } from "./hash";
 const REAL_RULESET = "ruleset-v1-test";
 
 const baseInputs = {
-  commitHash: "abcd123",
+  commitHash: "abcd123def56",
   rulesetVersion: REAL_RULESET,
   seed: "2026-05-03",
   modIds: [],
@@ -32,7 +32,7 @@ describe("fingerprintBytes", () => {
   it("changes when commitHash changes", () => {
     const a = sha256Hex(fingerprintBytes(baseInputs));
     const b = sha256Hex(
-      fingerprintBytes({ ...baseInputs, commitHash: "ffff999" }),
+      fingerprintBytes({ ...baseInputs, commitHash: "ffff999aaaaa" }),
     );
     expect(a).not.toBe(b);
   });
@@ -141,7 +141,32 @@ describe("fingerprint", () => {
   });
 
   it("matches a hardcoded golden value", () => {
-    expect(fingerprint(baseInputs)).toBe("KYsujM27qP_Z6uGIjcLk5D");
+    expect(fingerprint(baseInputs)).toBe("iyFf_akWHbsMe8lprGyrH6");
+  });
+
+  // Phase 8.A.1 addendum B4: 12-char commit hash form is the
+  // forever-collision-resistant pin (vite.config.ts:7 `--short=12`).
+  // The pre-image is byte-changed from the previous 7-char form;
+  // this golden is the new pinned vector under the 12-char build.
+  it("matches the 12-char-commit golden for the canonical baseInputs", () => {
+    expect(baseInputs.commitHash.length).toBe(12);
+    expect(baseInputs.commitHash).toMatch(/^[0-9a-f]{12}$/);
+    expect(fingerprint(baseInputs)).toBe("iyFf_akWHbsMe8lprGyrH6");
+  });
+
+  // Phase 8.A.1 addendum B4 + decision 1 + decision 1a: the mod-ID
+  // slot is part of the fingerprint pre-image (Phase 1 frozen
+  // contract); Phase 8 exercises it with a synthetic mod-ID and
+  // pins the resulting golden so the empty-mods vs single-mod path
+  // is byte-distinct. The Phase 9 mod loader inherits this surface
+  // unchanged.
+  it("matches the synthetic-mod-ID golden (Phase 8 mod-slot exercise)", () => {
+    const withMod = {
+      ...baseInputs,
+      modIds: ["icefall.mod.test-vector-1"],
+    };
+    expect(fingerprint(withMod)).toBe("lTehjjHQfSlG1G9okHmwhT");
+    expect(fingerprint(withMod)).not.toBe(fingerprint(baseInputs));
   });
 });
 

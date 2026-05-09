@@ -10,7 +10,7 @@ import { atlasBinaryHashPlugin } from "./scripts/vite-plugin-atlas-binary-hash.m
 export default defineConfig({
   plugins: [atlasBinaryHashPlugin()],
   define: {
-    __COMMIT_HASH__: JSON.stringify("dev0000"),
+    __COMMIT_HASH__: JSON.stringify("dev000000000"),
   },
   test: {
     globals: false,

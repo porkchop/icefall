@@ -560,6 +560,305 @@ export default tseslint.config(
     },
   },
   {
+    // Phase 8.A.1 — `src/router/**` is the URL parser + redirect +
+    // route-error message layer (memo decision 6 + addendum B3, B5,
+    // B7). The router does not participate in deterministic
+    // simulation byte output (B8) — it consumes URL parameters and
+    // routes between `latest/` and `releases/<commit>/`. Layer rules:
+    //
+    //   - No imports from `src/sim/**`, `src/mapgen/**`,
+    //     `src/render/**`, `src/input/**`, `src/atlas/**`. The router
+    //     speaks to the URL bar and to `src/share/**` (for action-log
+    //     decoding); the rest of the game's state is downstream.
+    //   - No `Math.random`, `Date.now`, `performance.now`, `new Date()`.
+    //     Routing is deterministic — given the same URL plus the same
+    //     `releases/index.json`, the redirect target is fixed.
+    //   - Date *consumption* (`Date.toISOString()` to compare-only
+    //     ISO-8601 strings from `releases/index.json`'s `publishedAt`
+    //     field) is permitted ONLY inside
+    //     `src/router/release-index-parse.ts` (advisory A1). All other
+    //     router files inherit the deterministic-code Date ban.
+    //
+    // The directory is empty in 8.A.1; Phase 8.A.2 lands url-parse.ts,
+    // redirect.ts, messages.ts, release-index-parse.ts. The
+    // release-index-parse.ts file inherits all bans below EXCEPT
+    // the Date global / new-Date() ban (that exception lives in a
+    // tighter scope below — fix for code-review-phase-8-A-1.md N1).
+    files: ["src/router/**/*.ts"],
+    ignores: ["src/router/**/*.test.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: [
+                "**/sim/**",
+                "**/mapgen/**",
+                "**/render/**",
+                "**/input/**",
+                "**/atlas/**",
+                "**/main",
+              ],
+              message:
+                "src/router/** may import only src/core/** and src/share/** — routing is upstream of sim/render/input/atlas (memo decision 6 + addendum B5).",
+            },
+          ],
+        },
+      ],
+      "no-restricted-syntax": ["error", ...FORBIDDEN_TIME],
+    },
+  },
+  {
+    // Phase 8.A.1 — `src/router/**` Date global ban applies to every
+    // file EXCEPT `src/router/release-index-parse.ts` (advisory A1).
+    // The exception is for the read-only consumption path of
+    // `releases/index.json`'s `publishedAt` ISO-8601 field via
+    // `Date.toISOString()`. Math.random / performance.now /
+    // cross-layer imports remain banned for that file (inherited
+    // from the broader src/router/** block above) — only the Date
+    // global is lifted here. Scoping correctness: the broader block
+    // above declares `no-restricted-globals` ONLY in this tighter
+    // override block, so files under src/router/** that are NOT
+    // release-index-parse.ts get the Date ban applied here, while
+    // release-index-parse.ts is excluded by the file pattern.
+    files: ["src/router/**/*.ts"],
+    ignores: [
+      "src/router/**/*.test.ts",
+      "src/router/release-index-parse.ts",
+    ],
+    rules: {
+      "no-restricted-globals": [
+        "error",
+        { name: "Date", message: "Date is banned in deterministic code." },
+        {
+          name: "performance",
+          message: "performance is banned in deterministic code.",
+        },
+      ],
+    },
+  },
+  {
+    // Phase 8.A.1 — advisory A1: `src/router/release-index-parse.ts`
+    // is the ONE file in src/router/** allowed to use `Date` (for
+    // `new Date(publishedAt).toISOString()` round-trip consumption
+    // of `releases/index.json`'s `publishedAt` ISO-8601 field). The
+    // input is a fixed string from a JSON manifest, so the use is
+    // determinism-safe. Bans preserved for THIS file:
+    //   - Math.random  (no PRNG-as-time-source)
+    //   - Date.now()   (no clock-as-time-source — the time source is
+    //                   the publishedAt string, not the current time)
+    //   - performance.now()
+    //   - cross-layer imports (inherited from the broader
+    //     `src/router/**` block above)
+    //
+    // Lifted: `Date` global + `new Date(...)` constructor (so the
+    // file may parse the publishedAt string and call .toISOString()
+    // for round-trip).
+    //
+    // Not in scope: the file MUST NOT use `Date.now()` or zero-arg
+    // `new Date()` (clock reads); the FORBIDDEN_TIME entries for
+    // those remain enforced via the `no-restricted-syntax` rule in
+    // this override.
+    files: ["src/router/release-index-parse.ts"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector:
+            "MemberExpression[object.name='Math'][property.name='random']",
+          message: "Math.random is banned in deterministic code.",
+        },
+        {
+          selector:
+            "MemberExpression[object.name='Date'][property.name='now']",
+          message:
+            "Date.now is banned even in src/router/release-index-parse.ts — the file may parse the publishedAt string but must not read the wall clock.",
+        },
+        {
+          selector:
+            "MemberExpression[object.name='performance'][property.name='now']",
+          message: "performance.now is banned in deterministic code.",
+        },
+      ],
+      "no-restricted-globals": [
+        "error",
+        {
+          name: "performance",
+          message: "performance is banned in deterministic code.",
+        },
+      ],
+    },
+  },
+  {
+    // Phase 8.A.1 — `src/verifier/**` is the pure verifier layer
+    // (memo decision 10 + addendum B8). Unlike the rest of the new
+    // layers, the verifier IS allowed to import `src/sim/harness.ts`
+    // because verification runs a fresh simulation under the action
+    // log and asserts the resulting state hash matches the claim.
+    // The verifier is NOT in `RULES_FILES` because its content does
+    // not affect simulation byte output — it consumes the output.
+    // The reachability test in `tests/build/rules-files-reachability
+    // .test.ts` defends against accidental `harness → verifier`
+    // imports.
+    files: ["src/verifier/**/*.ts"],
+    ignores: ["src/verifier/**/*.test.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: [
+                "**/render/**",
+                "**/input/**",
+                "**/atlas/**",
+                "**/router/**",
+                "**/save/**",
+                "**/main",
+              ],
+              message:
+                "src/verifier/** may import src/core/**, src/share/**, src/sim/harness, src/sim/types only — verifier consumes simulation output (memo decision 10 + addendum B8).",
+            },
+          ],
+        },
+      ],
+      "no-restricted-syntax": ["error", ...FORBIDDEN_TIME],
+      "no-restricted-globals": [
+        "error",
+        { name: "Date", message: "Date is banned in deterministic code." },
+        {
+          name: "performance",
+          message: "performance is banned in deterministic code.",
+        },
+      ],
+    },
+  },
+  {
+    // Phase 8.A.1 — `src/share/**` is the action-log codec layer
+    // (memo decision 2 + addendum B1, B2). The wire form is
+    // `base64url(fflate.zlibSync(envelope, { level: 1 }))`; the
+    // decoder is `fflate.unzlibSync(base64urlDecode(s))`. The
+    // sibling `deflateSync` / `inflateSync` functions emit raw
+    // DEFLATE without the zlib header + Adler-32 trailer and are
+    // byte-distinct from the `zlibSync` wire form — using them
+    // would silently fork the cross-runtime byte-identity guarantee
+    // inherited from `src/atlas/png.ts`'s `zlibSync` usage. Lint
+    // bans the wrong fflate functions here.
+    files: ["src/share/**/*.ts"],
+    ignores: ["src/share/**/*.test.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: [
+                "**/sim/**",
+                "**/mapgen/**",
+                "**/render/**",
+                "**/input/**",
+                "**/atlas/**",
+                "**/router/**",
+                "**/verifier/**",
+                "**/save/**",
+                "**/main",
+              ],
+              message:
+                "src/share/** may import only src/core/** and the fflate `zlibSync`/`unzlibSync` pair (memo addendum B1).",
+            },
+          ],
+          paths: [
+            {
+              name: "fflate",
+              importNames: ["deflateSync", "inflateSync"],
+              message:
+                "src/share/** must use `zlibSync`/`unzlibSync` (memo addendum B1) — the raw `deflateSync`/`inflateSync` functions emit byte-distinct output without the zlib header + Adler-32 trailer and would fork cross-runtime byte-identity.",
+            },
+          ],
+        },
+      ],
+      "no-restricted-syntax": ["error", ...FORBIDDEN_TIME],
+      "no-restricted-globals": [
+        "error",
+        { name: "Date", message: "Date is banned in deterministic code." },
+        {
+          name: "performance",
+          message: "performance is banned in deterministic code.",
+        },
+      ],
+    },
+  },
+  {
+    // Phase 8.A.1 — `src/save/**` is the localStorage persistence
+    // layer (memo decision 8 + addendum B6). Save slots are keyed
+    // by fingerprint short-form; build-mismatched slots are routed
+    // through release-redirect rather than deleted. The save layer
+    // imports `src/share/**` (for action-log encoding) and
+    // `src/core/**` only.
+    files: ["src/save/**/*.ts"],
+    ignores: ["src/save/**/*.test.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: [
+                "**/sim/**",
+                "**/mapgen/**",
+                "**/render/**",
+                "**/input/**",
+                "**/atlas/**",
+                "**/router/**",
+                "**/verifier/**",
+                "**/main",
+              ],
+              message:
+                "src/save/** may import only src/core/** and src/share/** — save layer is upstream of sim (memo decision 8 + addendum B6).",
+            },
+          ],
+        },
+      ],
+      "no-restricted-syntax": ["error", ...FORBIDDEN_TIME],
+      "no-restricted-globals": [
+        "error",
+        { name: "Date", message: "Date is banned in deterministic code." },
+        {
+          name: "performance",
+          message: "performance is banned in deterministic code.",
+        },
+      ],
+    },
+  },
+  {
+    // Phase 8.A.1 code-review N3 — extend the determinism plugin's
+    // no-float-arithmetic ban to the four new Phase 8 layers, for
+    // symmetry with src/render/**, src/input/**, src/ui/**,
+    // src/atlas/**, src/sim/**, src/mapgen/**. Routing,
+    // verification, share-codec, and save-layer modules are
+    // integer-only by construction — the codec is byte-deterministic
+    // (action-log envelope is bytes; fflate operates on Uint8Array;
+    // base64url uses 8-bit alphabet indexing); the verifier hashes
+    // integers; the save layer serializes integer counters.
+    files: [
+      "src/router/**/*.ts",
+      "src/verifier/**/*.ts",
+      "src/share/**/*.ts",
+      "src/save/**/*.ts",
+    ],
+    ignores: [
+      "src/router/**/*.test.ts",
+      "src/verifier/**/*.test.ts",
+      "src/share/**/*.test.ts",
+      "src/save/**/*.test.ts",
+    ],
+    plugins: { determinism: determinismPlugin },
+    rules: {
+      "determinism/no-float-arithmetic": "error",
+    },
+  },
+  {
     // Tests live under the same scope as the production code they
     // exercise. Determinism rules — `no-float-arithmetic`, the
     // `no-restricted-syntax` time/iteration bans — are off inside

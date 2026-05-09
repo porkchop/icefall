@@ -52,6 +52,10 @@ in as their phases land.
 | `src/registries/` | none (pure data + types) | anything from `src/sim/`, `src/mapgen/`, `src/render/`, `src/input/`, `src/atlas/` |
 | `src/render/` | `src/core/` (read-only types only), `src/sim/` (read-only state), atlas assets | writing to `src/sim/` state, importing `src/core/streams` or `src/sim/combat` |
 | `src/input/` | none from core/sim/render | writing to `src/sim/` state directly |
+| `src/router/` (Phase 8) | `src/core/`, `src/share/` | `src/sim/`, `src/mapgen/`, `src/render/`, `src/input/`, `src/atlas/`, `src/main` |
+| `src/verifier/` (Phase 8) | `src/core/`, `src/share/`, `src/sim/harness`, `src/sim/types` | `src/render/`, `src/input/`, `src/atlas/`, `src/router/`, `src/save/`, `src/main` |
+| `src/share/` (Phase 8) | `src/core/`, `fflate` (`zlibSync` + `unzlibSync` only) | `src/sim/`, `src/mapgen/`, `src/render/`, `src/input/`, `src/atlas/`, `src/router/`, `src/verifier/`, `src/save/`, `src/main`; `fflate.deflateSync` / `fflate.inflateSync` |
+| `src/save/` (Phase 8) | `src/core/`, `src/share/` | `src/sim/`, `src/mapgen/`, `src/render/`, `src/input/`, `src/atlas/`, `src/router/`, `src/verifier/`, `src/main` |
 | `tools/` | `src/core/`, `src/mapgen/`, `src/registries/`, `src/atlas/` (build-time only), Node-only modules with the `node:` prefix | the running game's `src/main.ts`, `src/render/`, `src/input/`, browser-only paths; bare `fs`/`path`/`url` (Phase 4 addendum N10) |
 
 These rules are enforced primarily by ESLint configuration scoped via
@@ -1065,19 +1069,279 @@ Phase 7.A.2 will bump this again when the NPC + boss recipes land.
 - NPC dialog text / flavor strings live in a future `theme`
   registry (Phase 9 polish).
 
+### Phase 8 frozen contracts (run fingerprint, replay, saves, content-addressed releases)
+
+Phase 8 is the second planning-gate phase in the project (after
+Phase 4). The full canonical reference is
+`artifacts/decision-memo-phase-8.md` (18 numbered decisions plus
+the post-red-team addendum at lines 2944–3515 resolving 9 blockers).
+Phase 8.A.1 (drift-detection sweep + scaffolding) ships this section
+ahead of 8.A.2's URL-router + verifier + share-codec + save-layer
+content so the boundaries are locked before code is written.
+
+**Layer additions (memo decision 12 + addendum B8).** Four new
+top-level peers join the `src/` tree:
+
+| Layer | Imports allowed | Imports forbidden |
+|---|---|---|
+| `src/router/` | `src/core/`, `src/share/` | `src/sim/`, `src/mapgen/`, `src/render/`, `src/input/`, `src/atlas/`, `src/main` |
+| `src/verifier/` | `src/core/`, `src/share/`, `src/sim/harness`, `src/sim/types` | `src/render/`, `src/input/`, `src/atlas/`, `src/router/`, `src/save/`, `src/main` |
+| `src/share/` | `src/core/`, `fflate` (`zlibSync`/`unzlibSync` only) | `src/sim/`, `src/mapgen/`, `src/render/`, `src/input/`, `src/atlas/`, `src/router/`, `src/verifier/`, `src/save/`, `src/main`; `fflate.deflateSync` / `fflate.inflateSync` |
+| `src/save/` | `src/core/`, `src/share/` | `src/sim/`, `src/mapgen/`, `src/render/`, `src/input/`, `src/atlas/`, `src/router/`, `src/verifier/`, `src/main` |
+
+Lint rules for these scopes land in `eslint.config.js` in 8.A.1
+ahead of any file appearing in those directories. The verifier
+import direction is **one-way**: verifier may import the harness
+(it consumes simulation output); harness must NEVER import the
+verifier (a `harness → verifier` import would put verifier content
+on the `RULES_FILES` reachability surface, which is forbidden by
+the `tests/build/rules-files-reachability.test.ts` gate). The
+reverse-direction defense is the load-bearing B8 invariant.
+
+**Date-API exception (advisory A1).** Deterministic-code Date /
+performance bans apply to all four new layers EXCEPT
+`src/router/release-index-parse.ts`, which is permitted to use
+`Date.toISOString()` for read-only consumption of the `publishedAt`
+ISO-8601 field of `releases/index.json` entries (the field is
+generated at deploy time by `scripts/publish-dual.mjs`, which is
+not lint-scoped under `src/**`).
+
+**fflate compression-function pin (memo addendum B1).** The
+action-log codec wire form is **`base64url(fflate.zlibSync(envelope,
+{ level: 1 }))`**, NOT `deflateSync`. The decoder is
+`fflate.unzlibSync(base64urlDecode(s))`. This matches the existing
+`src/atlas/png.ts:19` usage of `zlibSync`, inheriting the
+cross-runtime byte-identity guarantee from the Phase 4.B
+`cross-os-atlas-equality` matrix. The lint rule at the
+`src/share/**` scope bans the wrong fflate functions to make the
+contract structurally-enforced rather than prose-only.
+
+**Action-log envelope (memo decision 2 + addendum B1).** The
+canonical action-log byte sequence:
+
+```
+ACTION_LOG_MAGIC      = [0x49, 0x43, 0x45]                 // "ICE"
+ACTION_LOG_VERSION    = 0x01
+
+Envelope (uncompressed):
+  [ACTION_LOG_MAGIC][ACTION_LOG_VERSION][actionCount:u32 LE]
+  [encodeAction(actions[0])]...[encodeAction(actions[N-1])]
+
+Wire form:
+  base64url(fflate.zlibSync(envelope, { level: 1 }))
+
+Decoder:
+  decoded = fflate.unzlibSync(base64urlDecode(s))
+  assert decoded.length >= 8                  // magic+ver+count
+  assert decoded[0..3] === ACTION_LOG_MAGIC   // "ICE"
+  assert decoded[3] === ACTION_LOG_VERSION    // 0x01
+  actionCount = readU32LE(decoded, 4)
+  // ...decode each action via decodeAction()...
+  assert offset === decoded.length            // no trailing
+```
+
+A `decodeAction(bytes, offset)` companion to the Phase 1
+`encodeAction(action)` lands in 8.A.2 with byte-explicit validation
+(memo addendum B2): unknown-tag REJECT, strict-increasing tag
+ordering, type_len ∈ [1, 64], TAG_TARGET 4-byte int32 LE, TAG_ITEM
+1+N bytes with item_len ≤ 255, TAG_DIR 1 byte 0..7. Pinned error
+messages under the `decodeAction:` prefix.
+
+**URL parameter syntax (memo decision 3 + addendum B7).**
+
+```
+https://<origin>/<base>/?run=<22-char>&seed=<encoded>[&mods=<csv>]
+[#log=<base64url-encoded-action-log>]
+```
+
+- `?run=` is the 22-char base64url short fingerprint.
+- `?seed=` is the run seed (URL-encoded; required when `?run=` is present).
+- `?mods=` is the canonical comma-joined `sortedModIds` (optional).
+- `#log=` is the action-log wire form (hash fragment, not query
+  string — server-side privacy: GH-Pages access logs and Discord /
+  Slack link-preview crawlers see the query string but not the
+  hash fragment).
+
+**URL-length policy (memo addendum B7).** Enforced at the share UI:
+
+```
+URL_FULL_LENGTH_THRESHOLD = 2000     // chars; covers email, Slack, X
+URL_FULL_LENGTH_HARD_CAP  = 32000    // chars; refuses share above this
+```
+
+Three UI modes: `url-only` (full-URL ≤ threshold), `url-plus-clipboard-log`
+(URL alone + log via clipboard), `url-plus-export-log` (URL alone
++ "Download log" — Phase 9 polish, error-only in 8.A.2). Length is
+measured against the FULL post-percent-encoding URL, not against
+`wire.length` alone (multi-byte emoji/CJK seeds expand under
+percent encoding).
+
+**Mismatched-version UX (memo decision 5 + addendum B3, B5).** On
+page load:
+
+1. URL parser computes `parsedInputs`.
+2. `fingerprintShort = fingerprint(parsedInputs)` under the CURRENT
+   build's `commitHash` + `rulesetVersion`.
+3. If `fingerprintShort !== parsedRun`, the router fetches
+   `releases/index.json` (absolute URL pinned at
+   `${origin}${BASE_LATEST_PATH}releases/index.json` per addendum
+   B5, never the per-release relative URL) and enumerates entries
+   newest-first to find a matching pinned release.
+4. If a match is found, `window.location.replace` redirects to
+   `releases/<commit-short>/?<original-query>#<original-hash>`.
+5. If no match, throws one of nine pinned error strings (memo
+   decision 5 + addendum B3 ROUTE_ERR_FP_NO_RELEASE_AT_THIS_SEED):
+   `ROUTE_ERR_FP_INVALID`, `ROUTE_ERR_FP_BAD_CHAR`,
+   `ROUTE_ERR_SEED_MISSING`, `ROUTE_ERR_SEED_INVALID`,
+   `ROUTE_ERR_MODS_INVALID`, `ROUTE_ERR_LOG_DECODE`,
+   `ROUTE_ERR_NO_MATCHING_RELEASE`, `ROUTE_ERR_FP_TAMPERED`,
+   `ROUTE_ERR_FP_NO_RELEASE_AT_THIS_SEED`. Em-dashes are U+2014.
+   Exact-character match unit-asserted.
+
+**`releases/<commit-short>/` layout (memo decision 7 + addendum B4).**
+
+The deploy artifact rooted at the `gh-pages` branch:
+
+```
+gh-pages branch
+├── index.html                          # latest/ entry
+├── assets/                             # latest/ JS, CSS, atlas
+├── releases/
+│   ├── index.json                      # schemaVersion = 1, all entries
+│   └── <commit-short>/
+│       ├── index.html
+│       └── assets/                     # per-release JS, CSS, atlas
+└── ...
+```
+
+`<commit-short>` is the **12-character** git short hash (memo
+addendum B4 — bumped from 7 in Phase 8.A.1 for forever
+collision-resistance). Per-release Vite `base` is
+`/icefall/releases/<commit-short>/`; the per-release atlas is
+pinned at deploy time. `releases/index.json` schema:
+
+```ts
+ReleaseEntry = {
+  commitShort:    string;   // /^[0-9a-f]{12}$/
+  commitHash:     string;   // /^[0-9a-f]{12}$/ — alias for v1
+  rulesetVersion: string;   // /^[0-9a-f]{64}$/
+  atlasBinaryHash: string;  // /^[0-9a-f]{64}$/
+  publishedAt:    string;   // /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/
+  // optional in 8.A.3: fpPrefixHashState (B5 incremental-state pin)
+};
+
+ReleaseIndex = {
+  schemaVersion: 1;
+  releases: ReleaseEntry[];   // newest first by publishedAt
+};
+```
+
+**localStorage persistence (memo decision 8 + addendum B6).** Save
+slots are keyed by `icefall:save:v1:<fingerprintShort>` with a
+`schemaVersion = 1` `SaveSlot` record. Auto-save fires every 10
+actions plus on `beforeunload`. On page-load resume:
+
+1. Slot keyed under the current-build fingerprint exists →
+   silent replay.
+2. No exact-match slot → enumerate ALL `icefall:save:v1:*` keys;
+   any slot whose `inputs.seed === parsedSeed` AND
+   `inputs.commitHash !== CURRENT_BUILD.commitHash` surfaces in the
+   UI as an "Open in pinned release?" link (build-mismatched slots
+   are NEVER deleted by the integrity-check path; they are
+   preserved so the user can always recover).
+3. Quota exceeded → evict-oldest-5 + retry, ultimately surface a
+   pinned error.
+
+**Verifier API contract (memo decision 10 + advisory A4).**
+
+```ts
+type VerifyArgs = {
+  fingerprint: string;            // 22-char or 43-char form
+  seed: string;
+  modIds: readonly string[];
+  actionLog: Uint8Array;          // post-zlib decode; uncompressed
+  claimedFinalStateHash: string;  // 64-char lowercase hex
+  expectedAtlasBinaryHash: string;  // REQUIRED per advisory A4
+  // optional: expectedRulesetVersion
+};
+
+type VerifyResult =
+  | { kind: "valid" }
+  | { kind: "fingerprint-mismatch", computed: string }
+  | { kind: "ruleset-mismatch", expected: string, actual: string }
+  | { kind: "atlas-mismatch", expected: string, actual: string }
+  | { kind: "state-hash-mismatch", expected: string, actual: string }
+  | { kind: "outcome-mismatch", expected: RunOutcome, actual: RunOutcome }
+  | { kind: "log-rejected", reason: string };
+```
+
+Adding a new `kind` is **additive** (no `rulesetVersion` bump).
+Removing or renaming a kind is a `rulesetVersion` bump. The
+verifier runs in three runtimes (browser, Node CLI
+`tools/verify.ts`, in-page replay viewer) without code duplication.
+
+**`__COMMIT_HASH__` pin (memo addendum B4).** `vite.config.ts:7`
+reads `git rev-parse --short=12 HEAD` (12 chars); previous
+Phases 1–7 used `--short=7`. The 12-char form is the
+forever-collision-resistant pin. The fingerprint pre-image's
+`commitHash` UTF-8 byte length grew from 7 to 12 bytes, byte-
+changing the pre-image but NOT changing `rulesetVersion` (which
+derives from `rulesText` + `atlasBinaryHash`, neither of which
+include `commitHash`). `vitest.config.ts` injects the synthetic
+fixture `"dev000000000"` (12 chars).
+
+**`REPLAY_DIGEST` golden constant (memo decision 13).**
+
+```
+REPLAY_DIGEST = sha256Hex(runScripted(decodeActionLog(
+                  encodeActionLog(SELF_TEST_WIN_LOG)
+                )).finalState.stateHash)
+```
+
+By construction `REPLAY_DIGEST === WIN_DIGEST` (the round-trip
+through the action-log codec is identity for the simulation).
+Pinned in `src/core/self-test.ts` during 8.A.2's first-green CI;
+exercised by chromium/firefox/webkit cross-runtime. Joins the
+existing golden chain (RANDOM_WALK_DIGEST + MAPGEN_DIGEST +
+SIM_DIGEST + ATLAS_DIGEST + 4 preset-seed values + INVENTORY_DIGEST
++ WIN_DIGEST).
+
+**Bundle size budget (memo decision 16).** The Phase 2.0 budget
+of 75 KB gzipped JS is bumped to **110 KB** in 8.A.2's
+`.github/workflows/deploy.yml` to accommodate fflate (~30 KB
+gzipped) and the four new layers (~15 KB combined). Phase 7.B
+ships at 33.69 KB gzipped; the post-Phase-8.A.2 estimate is
+~75–85 KB gzipped, leaving 25–35 KB headroom under the new
+budget.
+
+**Phase decomposition.** 8.0 (planning gate; landed at commit
+`8f46db6`) → 8.A.1 (drift sweep + scaffolding; this section) →
+8.A.2 (sandbox-verifiable JS implementation) → 8.A.3 (build-
+pipeline extension; not sandbox-verifiable) → 8.B (live-deploy +
+cross-runtime + cross-OS verification). The 8.A.3 split is novel
+for this project (Phases 1–7 used a single sandbox-verifiable step
+plus a live-deploy step); the rationale is that the dual-build CI
+extension (`scripts/publish-dual.mjs`) cannot be sandbox-verified
+because the second tree's URL routing requires the live GH-Pages
+host.
+
 ### Build-time constants
 
 `commitHash` and `rulesetVersion` are injected via Vite `define`. They
 are exposed by `src/build-info.ts`:
 
 ```ts
-export const commitHash: string;       // 7-char hex when built; "dev" in tests
+export const commitHash: string;       // 12-char hex when built (Phase 8.A.1 addendum B4); "dev000000000" in tests
 export const rulesetVersion: string;   // sentinel string in Phase 1
 ```
 
-`vite.config.ts` reads `git rev-parse --short HEAD` at build time;
-`src/build-info.ts` falls back to `"dev"` when not built (Vitest
-unit tests).
+`vite.config.ts` reads `git rev-parse --short=12 HEAD` at build time;
+`src/build-info.ts` falls back to `"dev000000000"` when not built
+(Vitest unit tests). The 12-char short hash is the
+forever-collision-resistant pin (Phase 8.A.1 addendum B4); Phase
+1–7 used 7 chars but bumped to 12 in 8.A.1 to eliminate the
+collision-prone surface ahead of any fingerprint URL ever being
+shared (no `?run=` URL has been minted before Phase 8.A.2).
 
 ## Lint rule inventory
 

@@ -12,7 +12,7 @@ export const EMPTY_SHA256 =
   "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 
 export const commitHash: string =
-  typeof __COMMIT_HASH__ !== "undefined" ? __COMMIT_HASH__ : "dev0000";
+  typeof __COMMIT_HASH__ !== "undefined" ? __COMMIT_HASH__ : "dev000000000";
 
 export const rulesetVersion: string =
   typeof __RULESET_VERSION__ !== "undefined"
