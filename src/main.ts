@@ -29,6 +29,17 @@ import { renderEquipment } from "./ui/equipment";
 import { renderWinScreen } from "./ui/win-screen";
 import type { RunState } from "./sim/types";
 import type { Action } from "./core/encode";
+// Phase 8.A.2b — verifier + save layer + URL router (memo decision
+// 10 + decision 8 + decision 6). The diagnostic page exposes
+// "Verify a Pasted Log" + "Save Slots" + "Replay This Run" UI
+// sections on top of these surfaces; the auto-redirect path is
+// opt-in via `?run=` URL parameters and falls back gracefully when
+// `releases/index.json` is unreachable (pre-8.A.3 deploy).
+import { verify, type VerifyResult } from "./verifier/verify";
+import { listSlots, type SaveSlot } from "./save/storage";
+import { decideRouting, type RoutingDecision } from "./router/redirect";
+import { decodeActionLog } from "./share/decode";
+import type { FingerprintInputs } from "./core/fingerprint";
 
 declare global {
   interface Window {
@@ -61,6 +72,16 @@ declare global {
     __GAME_FLOOR__: number | undefined;
     __GAME_HP__: number | undefined;
     __GAME_OUTCOME__: "running" | "dead" | "won" | undefined;
+    // Phase 8.A.2b — verifier + save + replay diagnostic flags. These
+    // expose the page's verify/save/replay state to the cross-runtime
+    // Playwright suite (memo decision 15). The replay viewer fires
+    // when `?mode=replay` is in the URL.
+    __VERIFY_RESULT_KIND__: VerifyResult["kind"] | "idle" | undefined;
+    __SAVE_SLOTS_COUNT__: number | undefined;
+    __ROUTER_DECISION_KIND__: RoutingDecision["kind"] | "skipped" | undefined;
+    __REPLAY_MODE__: "active" | "idle" | undefined;
+    __REPLAY_FINAL_STATE_HASH__: string | undefined;
+    __REPLAY_OUTCOME__: "running" | "dead" | "won" | undefined;
   }
 }
 
@@ -535,6 +556,224 @@ function renderDiagnostic(host: HTMLElement): void {
   }
 
   root.appendChild(atlasSection);
+
+  // Phase 8.A.2b — Verify a Pasted Log section (memo decision 15).
+  // Lets a user paste a base64url action-log wire string and a
+  // claimed final state hash; runs verify() against the current
+  // build's commit/ruleset/atlas. Exposes __VERIFY_RESULT_KIND__
+  // for cross-runtime Playwright e2e.
+  window.__VERIFY_RESULT_KIND__ = "idle";
+
+  const verifySection = el("section", "verify-pasted");
+  verifySection.id = "verify-pasted";
+  verifySection.appendChild(el("h2", undefined, "Verify a pasted log"));
+  verifySection.appendChild(
+    el(
+      "p",
+      "verify-help",
+      "Phase 8 verifier: paste a base64url action-log wire string + the claimed final state hash, and verify() will replay the log against the current build and report the discriminated VerifyResult kind.",
+    ),
+  );
+
+  const verifyFormSeed = el("label", "verify-input-row", "seed");
+  const verifySeedInput = document.createElement("input");
+  verifySeedInput.type = "text";
+  verifySeedInput.id = "verify-seed-input";
+  verifySeedInput.placeholder = "alpha-1";
+  verifyFormSeed.appendChild(verifySeedInput);
+  verifySection.appendChild(verifyFormSeed);
+
+  const verifyFormFp = el("label", "verify-input-row", "fingerprint (22-char or 43-char)");
+  const verifyFpInput = document.createElement("input");
+  verifyFpInput.type = "text";
+  verifyFpInput.id = "verify-fp-input";
+  verifyFpInput.placeholder = "iyFf_akWHbsMe8lprGyrH6";
+  verifyFormFp.appendChild(verifyFpInput);
+  verifySection.appendChild(verifyFormFp);
+
+  const verifyFormHash = el("label", "verify-input-row", "claimed final state hash (64-hex)");
+  const verifyHashInput = document.createElement("input");
+  verifyHashInput.type = "text";
+  verifyHashInput.id = "verify-hash-input";
+  verifyHashInput.placeholder = "0".repeat(64);
+  verifyFormHash.appendChild(verifyHashInput);
+  verifySection.appendChild(verifyFormHash);
+
+  const verifyFormLog = el("label", "verify-input-row", "action-log wire (base64url)");
+  const verifyLogInput = document.createElement("textarea");
+  verifyLogInput.id = "verify-log-input";
+  verifyLogInput.rows = 4;
+  verifyLogInput.placeholder = "(paste the #log= value from a shared URL)";
+  verifyFormLog.appendChild(verifyLogInput);
+  verifySection.appendChild(verifyFormLog);
+
+  const verifyButton = document.createElement("button");
+  verifyButton.type = "button";
+  verifyButton.id = "verify-run";
+  verifyButton.textContent = "Verify";
+  verifySection.appendChild(verifyButton);
+
+  const verifyOutput = el("pre", "verify-output");
+  verifyOutput.id = "verify-output";
+  verifySection.appendChild(verifyOutput);
+
+  function runVerify(): void {
+    const result = verify({
+      fingerprint: verifyFpInput.value.trim(),
+      seed: verifySeedInput.value,
+      modIds: [],
+      actionLog: verifyLogInput.value.trim(),
+      claimedFinalStateHash: verifyHashInput.value.trim(),
+      expectedAtlasBinaryHash: atlasBinaryHash,
+    });
+    verifyOutput.textContent = JSON.stringify(result, null, 2);
+    window.__VERIFY_RESULT_KIND__ = result.kind;
+  }
+  verifyButton.addEventListener("click", () => {
+    runVerify();
+  });
+
+  root.appendChild(verifySection);
+
+  // Phase 8.A.2b — Save Slots section (memo decision 15 + addendum
+  // B6). Lists every `icefall:save:v1:*` localStorage key and surfaces
+  // stale-release slots (different commitHash, same seed) with a
+  // "Open in pinned release" link. Read-only — slot deletion is
+  // Phase 9 polish.
+  const saveSection = el("section", "save-slots");
+  saveSection.id = "save-slots";
+  saveSection.appendChild(el("h2", undefined, "Save slots"));
+  saveSection.appendChild(
+    el(
+      "p",
+      "save-help",
+      "Phase 8 multi-slot save: every active run is keyed by its 22-char fingerprint short. Stale-release slots (same seed, different commitHash) are preserved and rendered with a redirect link.",
+    ),
+  );
+
+  const saveList = el("ul", "save-list");
+  saveList.id = "save-slots-list";
+  saveSection.appendChild(saveList);
+
+  function refreshSaveSlots(): void {
+    saveList.innerHTML = "";
+    let slots: readonly SaveSlot[] = [];
+    try {
+      slots = listSlots(window.localStorage);
+    } catch {
+      // localStorage may be unavailable (e.g. private browsing on
+      // some browsers); render the empty state.
+    }
+    window.__SAVE_SLOTS_COUNT__ = slots.length;
+    if (slots.length === 0) {
+      const empty = el("li", "save-empty", "No active save slots.");
+      saveList.appendChild(empty);
+      return;
+    }
+    for (const slot of slots) {
+      const isStale = slot.inputs.commitHash !== commitHash;
+      const li = el("li", isStale ? "save-slot stale" : "save-slot");
+      li.appendChild(
+        el(
+          "code",
+          undefined,
+          `${slot.fingerprintShort}  seed=${slot.inputs.seed}  floor=${slot.floorN}  hp=${slot.hpRemaining}  outcome=${slot.outcome}  saved=${slot.savedAt}`,
+        ),
+      );
+      if (isStale) {
+        const link = document.createElement("a");
+        link.href = `${import.meta.env.BASE_URL}releases/${slot.inputs.commitHash}/?seed=${encodeURIComponent(slot.inputs.seed)}`;
+        link.textContent = "[Open in pinned release]";
+        link.className = "save-stale-link";
+        li.appendChild(document.createTextNode(" "));
+        li.appendChild(link);
+      }
+      saveList.appendChild(li);
+    }
+  }
+
+  const saveRefreshButton = document.createElement("button");
+  saveRefreshButton.type = "button";
+  saveRefreshButton.id = "save-slots-refresh";
+  saveRefreshButton.textContent = "Refresh";
+  saveSection.appendChild(saveRefreshButton);
+  saveRefreshButton.addEventListener("click", () => {
+    refreshSaveSlots();
+  });
+
+  refreshSaveSlots();
+  root.appendChild(saveSection);
+
+  // Phase 8.A.2b — Replay This Run section (memo decision 9 +
+  // decision 15). When `?mode=replay` is in the URL AND `?run=` +
+  // `?seed=` are also present, decode the action log and replay it
+  // via runScripted, exposing __REPLAY_FINAL_STATE_HASH__ and
+  // __REPLAY_OUTCOME__ for cross-runtime e2e.
+  window.__REPLAY_MODE__ = "idle";
+
+  const replaySection = el("section", "replay-this-run");
+  replaySection.id = "replay-this-run";
+  replaySection.appendChild(el("h2", undefined, "Replay this run"));
+  const replayUrl = new URL(window.location.href);
+  const isReplayMode = replayUrl.searchParams.get("mode") === "replay";
+  if (!isReplayMode) {
+    replaySection.appendChild(
+      el(
+        "p",
+        "replay-help",
+        "Append `?mode=replay&run=<fp>&seed=<seed>#log=<wire>` to this URL to replay a shared run. The current page is not in replay mode.",
+      ),
+    );
+  } else {
+    window.__REPLAY_MODE__ = "active";
+    const replayDecision = decideRouting(
+      window.location.href,
+      {
+        commitHash,
+        rulesetVersion,
+        basePath: import.meta.env.BASE_URL,
+      },
+      null, // 8.A.2b skips the index fetch — that path is exercised by 8.A.3
+    );
+    window.__ROUTER_DECISION_KIND__ = replayDecision.kind;
+    if (replayDecision.kind === "boot-replay" && replayDecision.logWire !== null) {
+      try {
+        const inputs: FingerprintInputs = replayDecision.inputs;
+        const actions = decodeActionLog(replayDecision.logWire);
+        const result = runScripted({ inputs, actions });
+        const finalHash = sha256Hex(result.finalState.stateHash);
+        window.__REPLAY_FINAL_STATE_HASH__ = finalHash;
+        window.__REPLAY_OUTCOME__ = result.outcome;
+        const dl = el("dl", "replay-output");
+        dl.id = "replay-output";
+        function row(k: string, v: string): void {
+          dl.appendChild(el("dt", undefined, k));
+          dl.appendChild(el("dd", undefined, v));
+        }
+        row("final state hash", finalHash);
+        row("outcome", result.outcome);
+        row("floor reached", String(result.finalState.floorN));
+        row("logLength", String(result.logLength));
+        replaySection.appendChild(dl);
+      } catch (e) {
+        const err = e as Error;
+        replaySection.appendChild(
+          el("pre", "replay-error", `replay failed: ${err.message}`),
+        );
+      }
+    } else {
+      replaySection.appendChild(
+        el(
+          "pre",
+          "replay-error",
+          `replay-mode URL did not parse as a boot-replay: ${replayDecision.kind}\n\n${
+            replayDecision.kind === "error" ? replayDecision.message : ""
+          }`,
+        ),
+      );
+    }
+  }
+  root.appendChild(replaySection);
 
   host.appendChild(details);
 }

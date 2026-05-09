@@ -34,13 +34,17 @@ jobs:
         run: npm test
       - name: build
         run: npm run build
-      - name: bundle size budget (≤ 75 KB gzipped, memo decision 13)
+      - name: bundle size budget (≤ 110 KB gzipped, Phase 8 memo decision 16)
         run: |
           set -e
           gzip_size=$(find dist/assets -name '*.js' -exec gzip -c {} \; | wc -c)
           echo "JS gzipped bundle size: ${gzip_size} bytes"
-          if [ "$gzip_size" -gt 76800 ]; then
-            echo "::error::Bundle size ${gzip_size} bytes exceeds 75 KB budget"
+          # Phase 8.A.2b bumps the budget from 75 KB to 110 KB to
+          # accommodate fflate (~30 KB) + the Phase 8 router + verifier
+          # + share + save layers (~15 KB combined). Phase 8.A.2b actual
+          # is ~40 KB gzipped; the headroom carries Phase 9 polish.
+          if [ "$gzip_size" -gt 112640 ]; then
+            echo "::error::Bundle size ${gzip_size} bytes exceeds 110 KB budget"
             exit 1
           fi
       - name: upload bundle report (memo addendum N5)

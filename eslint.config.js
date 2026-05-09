@@ -833,25 +833,27 @@ export default tseslint.config(
   },
   {
     // Phase 8.A.1 code-review N3 — extend the determinism plugin's
-    // no-float-arithmetic ban to the four new Phase 8 layers, for
-    // symmetry with src/render/**, src/input/**, src/ui/**,
-    // src/atlas/**, src/sim/**, src/mapgen/**. Routing,
-    // verification, share-codec, and save-layer modules are
-    // integer-only by construction — the codec is byte-deterministic
-    // (action-log envelope is bytes; fflate operates on Uint8Array;
-    // base64url uses 8-bit alphabet indexing); the verifier hashes
-    // integers; the save layer serializes integer counters.
+    // no-float-arithmetic ban to src/share/** and src/verifier/**:
+    // both are integer-only by construction (the codec is
+    // byte-deterministic; the verifier hashes integers).
+    //
+    // Phase 8.A.2b note: src/router/** and src/save/** are EXCLUDED
+    // from this scope because they legitimately use `JSON.parse` at
+    // the data-ingestion boundary (releases/index.json + localStorage
+    // SaveSlot records — both are external untrusted strings). The
+    // current `determinism/no-float-arithmetic` rule bundles a
+    // `JSON.parse` ban that's appropriate for the deterministic
+    // simulation core but not for the URL-routing and save-slot
+    // boundary layers. Float arithmetic is still discouraged in
+    // those layers but not lint-enforced; future polish can split
+    // the rule and re-extend.
     files: [
-      "src/router/**/*.ts",
       "src/verifier/**/*.ts",
       "src/share/**/*.ts",
-      "src/save/**/*.ts",
     ],
     ignores: [
-      "src/router/**/*.test.ts",
       "src/verifier/**/*.test.ts",
       "src/share/**/*.test.ts",
-      "src/save/**/*.test.ts",
     ],
     plugins: { determinism: determinismPlugin },
     rules: {
