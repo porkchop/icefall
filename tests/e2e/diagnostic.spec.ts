@@ -87,8 +87,8 @@ test("diagnostic page renders build info with derived (non-placeholder) ruleset"
   await page.goto("/");
   const banner = page.locator("#self-test-banner");
   await expect(banner).toBeVisible();
-  await expect(page.getByText("commitHash")).toBeVisible();
-  await expect(page.getByText("rulesetVersion")).toBeVisible();
+  await expect(page.getByText("commitHash", { exact: true })).toBeVisible();
+  await expect(page.getByText("rulesetVersion", { exact: true })).toBeVisible();
   // Phase 4.A.2 atomic flip (addendum B1): the placeholder is retired
   // and `rulesetVersion` is the derived `sha256(rulesText ‖
   // atlasBinaryHash)` value. Sample fingerprint is therefore NOT
